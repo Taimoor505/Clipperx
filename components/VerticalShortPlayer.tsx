@@ -11,6 +11,14 @@ import {
   Volume2,
   VolumeX,
   Check,
+  ChevronDown,
+  Share2,
+  Heart,
+  MessageCircle,
+  Bookmark,
+  Disc3,
+  Sparkles,
+  Terminal,
 } from 'lucide-react';
 import { detectContextualEmojis } from '@/lib/python-script';
 
@@ -44,18 +52,73 @@ export interface ViralClipSegment {
   transcript_lines: TranscriptLine[];
 }
 
-interface VerticalShortPlayerProps {
-  clip: ViralClipSegment;
-  videoFileUrl: string | null;
-  videoFileName: string;
-  captionPreset: CaptionPresetName;
-  enableKaraoke: boolean;
-  enableZoomCuts: boolean;
-  enableFaceTracking: boolean;
-  enableAudioDucking: boolean;
+export interface VerticalShortPlayerProps {
+  clip?: ViralClipSegment;
+  videoFileUrl?: string | null;
+  videoFileName?: string;
+  captionPreset?: CaptionPresetName;
+  enableKaraoke?: boolean;
+  enableZoomCuts?: boolean;
+  enableFaceTracking?: boolean;
+  enableAudioDucking?: boolean;
   customMusicUrl?: string | null;
   onRenderSuccess?: (clipId: number) => void;
 }
+
+const DEFAULT_SAMPLE_CLIP: ViralClipSegment = {
+  clip_id: 1,
+  title: 'Why 90% of AI Video Pipelines Fail at Frame Pacing',
+  start_time: '00:04:12.500',
+  end_time: '00:04:58.200',
+  duration_seconds: 45.7,
+  virality_score: 96,
+  hook_transcript:
+    'Stop cutting short-form video on fixed time intervals—you are destroying the speaker cadence.',
+  reasoning:
+    'Opens with a contrarian technical hook in the first 3.5 seconds and lands on clean sentence boundaries.',
+  transcript_lines: [
+    {
+      start_offset: 0.0,
+      end_offset: 4.5,
+      text: 'Stop cutting viral video on fixed time intervals',
+      words: [
+        { word: 'Stop', start_time: 0.0, end_time: 0.5 },
+        { word: 'cutting', start_time: 0.5, end_time: 1.1 },
+        { word: 'viral', start_time: 1.1, end_time: 1.7 },
+        { word: 'video', start_time: 1.7, end_time: 2.3 },
+        { word: 'on', start_time: 2.3, end_time: 2.6 },
+        { word: 'fixed', start_time: 2.6, end_time: 3.1 },
+        { word: 'time', start_time: 3.1, end_time: 3.7 },
+        { word: 'intervals', start_time: 3.7, end_time: 4.5 },
+      ],
+    },
+    {
+      start_offset: 4.5,
+      end_offset: 9.2,
+      text: 'you are destroying the natural speaker cadence.',
+    },
+    {
+      start_offset: 9.2,
+      end_offset: 16.0,
+      text: 'When Gemini brain analyzes acoustic pauses and facial motion',
+    },
+    {
+      start_offset: 16.0,
+      end_offset: 24.5,
+      text: 'every fast cut lands cleanly on a breath boundary.',
+    },
+    {
+      start_offset: 24.5,
+      end_offset: 34.0,
+      text: 'Pair that with smart face tracking and 1.12x zoom cuts',
+    },
+    {
+      start_offset: 34.0,
+      end_offset: 45.7,
+      text: 'and viewer retention jumps 100% without losing context.',
+    },
+  ],
+};
 
 export function timestampToSeconds(ts: string): number {
   const parts = ts.trim().split(':');
@@ -79,6 +142,13 @@ export function secondsToAssTime(sec: number): string {
   const mins = Math.floor(rem / 60);
   const secs = rem % 60;
   return `${hrs}:${String(mins).padStart(2, '0')}:${secs.toFixed(2).padStart(5, '0')}`;
+}
+
+export function formatPlayerTime(sec: number): string {
+  const safe = Math.max(0, sec);
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return `${String(mins).padStart(2, '0')}:${secs.toFixed(1).padStart(4, '0')}`;
 }
 
 export function synthesizeWordsForLine(line: TranscriptLine): WordTiming[] {
@@ -128,8 +198,8 @@ export function generateKaraokeAssFileContent(
     'Hormozi Pop': {
       font: 'Impact',
       size: 72,
-      primary: '&H0000FFFF', // Neon Yellow in BGR
-      secondary: '&H00FFFFFF', // White inactive
+      primary: '&H0000FFFF',
+      secondary: '&H00FFFFFF',
       outline: '&H00000000',
       borderStyle: 1,
       outlineW: 5,
@@ -148,7 +218,7 @@ export function generateKaraokeAssFileContent(
     'Cyber Neon': {
       font: 'Arial Black',
       size: 68,
-      primary: '&H00FFFF00', // Electric Cyan in BGR
+      primary: '&H00FFFF00',
       secondary: '&H00FFFFFF',
       outline: '&H00661100',
       borderStyle: 1,
@@ -167,7 +237,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: KaraokeMain,${p.font},${p.size},${p.primary},${p.secondary},${p.outline},&H80000000,-1,0,0,0,100,100,1,0,${p.borderStyle},${p.outlineW},3,2,70,70,${p.marginV},1
+Style: KaraokeMain,${p.font},${p.size},${p.primary},${p.secondary},${p.outline},&H80000000,-1,0,0,0,100,100,1,0,${p.borderStyle},${p.outlineW},3,2,70,70,{p.marginV},1
 Style: EmojiOverlay,Arial,82,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,2,70,70,${p.marginV + 125},1
 
 [Events]
@@ -206,7 +276,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       continue;
     }
 
-    // Standard \k karaoke line
     const kLine = words
       .map((w) => {
         const cs = Math.max(5, Math.round((w.end_time - w.start_time) * 100));
@@ -215,7 +284,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       .join(' ');
     events.push(`Dialogue: 0,${s},${e},KaraokeMain,,0,0,0,,${kLine}`);
 
-    // Active word highlight + \fscx110\fscy110 scale bump per word
     words.forEach((activeWord, activeIdx) => {
       const ws = secondsToAssTime(activeWord.start_time);
       const we = secondsToAssTime(
@@ -238,31 +306,51 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 }
 
 export default function VerticalShortPlayer({
-  clip,
-  videoFileUrl,
-  videoFileName,
-  captionPreset,
-  enableKaraoke,
-  enableZoomCuts,
-  enableFaceTracking,
-  enableAudioDucking,
+  clip = DEFAULT_SAMPLE_CLIP,
+  videoFileUrl = null,
+  videoFileName = 'input.mp4',
+  captionPreset = 'Hormozi Pop',
+  enableKaraoke = true,
+  enableZoomCuts = true,
+  enableFaceTracking = true,
+  enableAudioDucking = true,
   onRenderSuccess,
 }: VerticalShortPlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const scrubberRef = useRef<HTMLDivElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const emaFaceXRef = useRef<number>(0.5);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [showSafeZoneGuides, setShowSafeZoneGuides] = useState(false);
+  const [showSafeZoneGuides, setShowSafeZoneGuides] = useState(true);
   const [elapsedInClip, setElapsedInClip] = useState(0);
+  const [qualityMode, setQualityMode] = useState<'1080p 60fps' | '4K 60fps'>(
+    '1080p 60fps'
+  );
   const [isRecording, setIsRecording] = useState(false);
   const [recordingProgress, setRecordingProgress] = useState(0);
-  const [copiedCmd, setCopiedCmd] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
   const startSec = timestampToSeconds(clip.start_time);
   const endSec = timestampToSeconds(clip.end_time);
   const clipDuration = Math.max(5, endSec - startSec);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     setElapsedInClip(0);
@@ -278,6 +366,11 @@ export default function VerticalShortPlayer({
       vid.pause();
     }
   }, [clip.clip_id, clip.start_time, clip.end_time, startSec, videoFileUrl]);
+
+  const triggerToast = (msg: string) => {
+    setFeedbackToast(msg);
+    window.setTimeout(() => setFeedbackToast(null), 2200);
+  };
 
   // Draw 9:16 vertical frame with SOTA Engagement stack
   const renderFrameToCanvas = useCallback(
@@ -316,11 +409,11 @@ export default function VerticalShortPlayer({
             );
       const activeLine = lines[resolvedLineIdx];
 
-      // FEATURE 2: Sentence Transition Zoom Beats (1.0x vs 1.12x punch-in on alternating sentence chunks)
+      // Sentence Transition Zoom Beats (1.0x vs 1.12x punch-in)
       const isZoomBeatActive = enableZoomCuts && resolvedLineIdx % 2 === 1;
       const zoomFactor = isZoomBeatActive ? 1.12 : 1.0;
 
-      // FEATURE 3: EMA-Smoothed Smart Face Tracking Offset (x = clamp(X_face - 540, 0, max_x))
+      // EMA-Smoothed Smart Face Tracking Offset (x = clamp(X_face - 540, 0, max_x))
       const rawSpeakerNormX =
         0.5 +
         Math.sin(currentOffsetSec * 0.65) * 0.12 +
@@ -339,7 +432,6 @@ export default function VerticalShortPlayer({
         const vh = vid.videoHeight;
 
         if (enableFaceTracking) {
-          // Smart Face-Tracked 9:16 Auto-Reframing
           ctx.save();
           const scaleToFillH = (H / vh) * zoomFactor;
           const scaledW = vw * scaleToFillH;
@@ -353,7 +445,6 @@ export default function VerticalShortPlayer({
           ctx.drawImage(vid, -cropX, -cropY, scaledW, scaledH);
           ctx.restore();
         } else {
-          // Dual-Layer Gaussian Blur 9:16 Fill + 1.12x Zoom Beat
           ctx.save();
           ctx.filter = 'blur(22px) brightness(0.55) saturate(1.25)';
           const bgScale = Math.max(W / vw, H / vh);
@@ -383,7 +474,6 @@ export default function VerticalShortPlayer({
           ctx.restore();
         }
       } else {
-        // Studio Procedural 16:9 / Face-Tracked Feed
         const t = currentOffsetSec;
 
         const bgGrad = ctx.createLinearGradient(0, 0, W, H);
@@ -395,7 +485,7 @@ export default function VerticalShortPlayer({
 
         ctx.save();
         ctx.filter = 'blur(28px)';
-        ctx.fillStyle = 'rgba(245, 158, 11, 0.22)';
+        ctx.fillStyle = 'rgba(139, 92, 246, 0.24)';
         ctx.beginPath();
         ctx.arc(
           W * 0.5 + Math.sin(t * 1.1) * 70,
@@ -405,7 +495,7 @@ export default function VerticalShortPlayer({
           Math.PI * 2
         );
         ctx.fill();
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+        ctx.fillStyle = 'rgba(34, 211, 238, 0.2)';
         ctx.beginPath();
         ctx.arc(
           W * 0.35 + Math.cos(t * 0.9) * 60,
@@ -417,14 +507,13 @@ export default function VerticalShortPlayer({
         ctx.fill();
         ctx.restore();
 
-        // Foreground studio viewport
         const fgW = W * zoomFactor;
         const fgH = Math.round(((W * 9) / 16) * zoomFactor);
         const panOffsetPx = enableFaceTracking
           ? (0.5 - smoothedNormX) * 140
           : 0;
         const fgX = Math.round((W - fgW) / 2 + panOffsetPx);
-        const fgY = Math.round((H - fgH) / 2 - 40);
+        const fgY = Math.round((H - fgH) / 2 - 48);
 
         ctx.save();
         ctx.fillStyle = '#090D16';
@@ -443,15 +532,13 @@ export default function VerticalShortPlayer({
         ctx.fillStyle = studioGrad;
         ctx.fillRect(fgX, fgY, fgW, fgH);
 
-        // Simulated speaker silhouette + voice waveform
         const speakerCenterX = W * 0.5 + panOffsetPx * 0.6;
         const speakerCenterY = fgY + fgH * 0.46;
 
         if (enableFaceTracking) {
-          // EMA Face Bounding Box
           const boxW = Math.round(108 * zoomFactor);
           const boxH = Math.round(132 * zoomFactor);
-          ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
+          ctx.strokeStyle = 'rgba(34, 211, 238, 0.75)';
           ctx.lineWidth = 1.5;
           ctx.strokeRect(
             speakerCenterX - boxW / 2,
@@ -466,7 +553,7 @@ export default function VerticalShortPlayer({
             154,
             18
           );
-          ctx.fillStyle = '#38BDF8';
+          ctx.fillStyle = '#22D3EE';
           ctx.font = '600 10px monospace';
           ctx.textAlign = 'left';
           const cropPx = Math.round(
@@ -479,9 +566,8 @@ export default function VerticalShortPlayer({
           );
         }
 
-        // Voice + Sidechain Ducked Music Waveform Bars
         const barCount = 30;
-        const barAreaW = fgW * 0.7;
+        const barAreaW = fgW * 0.68;
         const startX = (W - barAreaW) / 2;
         const centerY = fgY + fgH * 0.55;
         for (let i = 0; i < barCount; i++) {
@@ -491,14 +577,14 @@ export default function VerticalShortPlayer({
                 Math.cos(t * 3.4 - i * 0.2) *
                 (isPlaying ? 1 : 0.35)
             ) *
-              56 *
+              54 *
               zoomFactor +
             8;
           const x = startX + i * (barAreaW / barCount);
           ctx.fillStyle =
             i % 3 === 0
-              ? 'rgba(245, 158, 11, 0.88)'
-              : 'rgba(226, 232, 240, 0.5)';
+              ? 'rgba(167, 139, 250, 0.9)'
+              : 'rgba(34, 211, 238, 0.65)';
           ctx.fillRect(x, centerY - wave / 2, 5, wave);
         }
 
@@ -508,30 +594,7 @@ export default function VerticalShortPlayer({
         ctx.restore();
       }
 
-      // Active SOTA Feature Telemetry Strip at Top of 9:16 Monitor
-      ctx.save();
-      ctx.fillStyle = 'rgba(11, 15, 23, 0.78)';
-      ctx.fillRect(14, 14, W - 28, 30);
-      ctx.font = '600 11px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillStyle = isZoomBeatActive ? '#FACC15' : '#94A3B8';
-      ctx.fillText(
-        isZoomBeatActive ? 'ZOOM: 1.12x PUNCH-IN' : 'ZOOM: 1.00x BASE',
-        24,
-        33
-      );
-      ctx.textAlign = 'right';
-      ctx.fillStyle = enableAudioDucking ? '#34D399' : '#64748B';
-      ctx.fillText(
-        enableAudioDucking
-          ? 'SIDECHAIN DUCK: -12dB ACTIVE'
-          : 'DUCKING: BYPASSED',
-        W - 24,
-        33
-      );
-      ctx.restore();
-
-      // FEATURE 1: ALEX HORMOZI-STYLE ANIMATED KARAOKE CAPTIONS & CONTEXTUAL EMOJIS
+      // ALEX HORMOZI-STYLE ANIMATED KARAOKE CAPTIONS & CONTEXTUAL EMOJIS
       if (activeLine && activeLine.text) {
         const words = synthesizeWordsForLine(activeLine);
         const activeWordIdx = words.findIndex(
@@ -556,20 +619,19 @@ export default function VerticalShortPlayer({
                 )
               );
 
-        const safeZoneY = H - 255; // MarginV = 520px equivalent on 960px canvas
+        const safeZoneY = H - 275; // Placed inside middle-lower safe zone, above bottom captions & left of right action bar
+        const safeCenterX = showSafeZoneGuides ? (W - 64) / 2 : W / 2;
         const emojis = detectContextualEmojis(activeLine.text);
 
         ctx.save();
 
-        // Contextual Emoji Overlay above caption block
         if (emojis) {
-          ctx.font = '32px sans-serif';
+          ctx.font = '30px sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(emojis, W / 2, safeZoneY - 56);
+          ctx.fillText(emojis, safeCenterX, safeZoneY - 54);
         }
 
-        // Preset styling configuration
         const isMinimalist = captionPreset === 'Minimalist Clean';
         const isCyber = captionPreset === 'Cyber Neon';
 
@@ -577,13 +639,12 @@ export default function VerticalShortPlayer({
           ? '#FFFFFF'
           : isCyber
             ? '#22D3EE'
-            : '#FACC15'; // Hormozi Neon Yellow
+            : '#FACC15';
         const inactiveColor = isMinimalist ? '#94A3B8' : '#FFFFFF';
         const fontFamily = isMinimalist
           ? '"Plus Jakarta Sans", sans-serif'
           : 'Impact, "Plus Jakarta Sans", sans-serif';
 
-        // Split words into up to 2 balanced lines
         const mid = Math.ceil(words.length / 2);
         const rows = [words.slice(0, mid), words.slice(mid)].filter(
           (r) => r.length > 0
@@ -592,7 +653,13 @@ export default function VerticalShortPlayer({
         if (isMinimalist) {
           ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
           ctx.beginPath();
-          ctx.roundRect(36, safeZoneY - 36, W - 72, rows.length * 36 + 18, 10);
+          ctx.roundRect(
+            24,
+            safeZoneY - 34,
+            (showSafeZoneGuides ? W - 96 : W - 48),
+            rows.length * 34 + 16,
+            10
+          );
           ctx.fill();
         }
 
@@ -600,11 +667,10 @@ export default function VerticalShortPlayer({
           const yPos =
             rows.length === 1
               ? safeZoneY
-              : safeZoneY - 16 + rowIdx * 36;
+              : safeZoneY - 15 + rowIdx * 34;
 
-          // Measure total row width
-          ctx.font = `800 26px ${fontFamily}`;
-          const wordSpacing = 10;
+          ctx.font = `800 24px ${fontFamily}`;
+          const wordSpacing = 9;
           const widths = rowWords.map(
             (w) => ctx.measureText(w.word.toUpperCase()).width
           );
@@ -612,7 +678,7 @@ export default function VerticalShortPlayer({
             widths.reduce((a, b) => a + b, 0) +
             Math.max(0, rowWords.length - 1) * wordSpacing;
 
-          let cursorX = (W - totalRowW) / 2;
+          let cursorX = safeCenterX - totalRowW / 2;
 
           rowWords.forEach((wObj, i) => {
             const globalWordIdx = rowIdx === 0 ? i : mid + i;
@@ -622,14 +688,13 @@ export default function VerticalShortPlayer({
             const tokenW = widths[i];
 
             ctx.save();
-            // Apply 1.10x scale bump (\fscx110\fscy110) on currently spoken word
             const centerX = cursorX + tokenW / 2;
             ctx.translate(centerX, yPos);
             if (isCurrentSpoken) {
               ctx.scale(1.12, 1.12);
             }
 
-            ctx.font = `800 26px ${fontFamily}`;
+            ctx.font = `800 24px ${fontFamily}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.lineJoin = 'round';
@@ -637,12 +702,12 @@ export default function VerticalShortPlayer({
 
             if (!isMinimalist) {
               ctx.strokeStyle = isCyber ? '#082F49' : '#000000';
-              ctx.lineWidth = 7;
+              ctx.lineWidth = 6.5;
               ctx.shadowColor =
                 isCyber && isCurrentSpoken
                   ? 'rgba(34, 211, 238, 0.85)'
                   : 'rgba(0, 0, 0, 0.85)';
-              ctx.shadowBlur = isCyber && isCurrentSpoken ? 16 : 8;
+              ctx.shadowBlur = isCyber && isCurrentSpoken ? 14 : 8;
               ctx.strokeText(tokenText, 0, 0);
             }
 
@@ -656,29 +721,12 @@ export default function VerticalShortPlayer({
 
         ctx.restore();
       }
-
-      if (showSafeZoneGuides) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
-        ctx.setLineDash([6, 4]);
-        ctx.lineWidth = 1.5;
-        const bottomUiY = H - 190;
-        ctx.strokeRect(24, bottomUiY, W - 48, 170);
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
-        ctx.fillRect(28, bottomUiY + 8, 250, 22);
-        ctx.fillStyle = '#38BDF8';
-        ctx.font = '600 11px monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText('SHORTS/REELS UI EXCLUSION ZONE', 34, bottomUiY + 23);
-        ctx.restore();
-      }
     },
     [
       captionPreset,
       clip.hook_transcript,
       clip.transcript_lines,
       clipDuration,
-      enableAudioDucking,
       enableFaceTracking,
       enableKaraoke,
       enableZoomCuts,
@@ -749,6 +797,26 @@ export default function VerticalShortPlayer({
     }
   };
 
+  // Interactive Timeline Scrubber Seek Handler
+  const handleScrubberClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const bar = scrubberRef.current;
+    if (!bar) return;
+    const rect = bar.getBoundingClientRect();
+    const clickRatio = Math.max(
+      0,
+      Math.min(1, (e.clientX - rect.left) / rect.width)
+    );
+    const targetOffset = clickRatio * clipDuration;
+    setElapsedInClip(targetOffset);
+
+    if (videoRef.current && videoFileUrl) {
+      const vid = videoRef.current;
+      if (vid.duration && Number.isFinite(vid.duration)) {
+        vid.currentTime = (startSec + targetOffset) % Math.max(1, vid.duration);
+      }
+    }
+  };
+
   const handleRenderAndDownloadShort = async () => {
     const canvas = canvasRef.current;
     if (!canvas || isRecording) return;
@@ -762,13 +830,13 @@ export default function VerticalShortPlayer({
     }
 
     try {
-      const stream = canvas.captureStream(30);
+      const stream = canvas.captureStream(60);
       const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
         ? 'video/webm;codecs=vp9'
         : 'video/webm';
       const recorder = new MediaRecorder(stream, {
         mimeType,
-        videoBitsPerSecond: 4_500_000,
+        videoBitsPerSecond: 6_000_000,
       });
 
       const chunks: BlobPart[] = [];
@@ -794,9 +862,7 @@ export default function VerticalShortPlayer({
         const tempUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = tempUrl;
-        a.download = `sota_short_clip_${clip.clip_id}_${captionPreset
-          .toLowerCase()
-          .replace(/\s+/g, '_')}.webm`;
+        a.download = `clipperx_short_${clip.clip_id}_1080x1920.webm`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -806,6 +872,7 @@ export default function VerticalShortPlayer({
           setIsRecording(false);
           setRecordingProgress(0);
           onRenderSuccess?.(clip.clip_id);
+          triggerToast('Downloaded 1080×1920 vertical render');
         }, 800);
       };
 
@@ -836,18 +903,26 @@ export default function VerticalShortPlayer({
     a.click();
     document.body.removeChild(a);
     window.setTimeout(() => URL.revokeObjectURL(tempUrl), 500);
+    setIsDropdownOpen(false);
+    triggerToast('Exported .ASS Karaoke Subtitles');
   };
 
-  const ffmpegCommand = `ffmpeg -y -ss ${clip.start_time} -to ${clip.end_time} -i "${videoFileName || 'input.mp4'}" -i music.mp3 -filter_complex "[0:v]${enableFaceTracking ? 'scale=-2:1920:force_original_aspect_ratio=increase,crop=1080:1920:420:0' : 'split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];[b]scale=1080:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2'}${enableZoomCuts ? ",split[zbase][zsrc];[zsrc]scale=iw*1.12:-1,crop=iw/1.12:ih/1.12[zzoom];[zbase][zzoom]overlay=0:0:enable='between(t,4.5,9.2)'" : ''},subtitles=clip_${clip.clip_id}_karaoke.ass[vout];[1:a]volume=0.15[bg];[0:a]asplit=2[sc][sp];[bg][sc]sidechaincompress=threshold=0.08:ratio=4:attack=20:release=300[duck];[sp][duck]amix=inputs=2:duration=first[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -c:a aac clip_${clip.clip_id}_sota.mp4`;
+  const handleCopyShareLink = () => {
+    const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://clipperx.ai'}/shorts/clip-${clip.clip_id}?t=${clip.start_time}`;
+    navigator.clipboard.writeText(shareUrl);
+    setIsDropdownOpen(false);
+    triggerToast('Share link copied to clipboard');
+  };
 
-  const copyFfmpegCommand = () => {
+  const handleCopyFfmpegCli = () => {
+    const ffmpegCommand = `ffmpeg -y -ss ${clip.start_time} -to ${clip.end_time} -i "${videoFileName}" -vf "scale=-2:1920,crop=1080:1920:420:0,subtitles=clip_${clip.clip_id}_karaoke.ass" -r 60 -c:v libx264 -c:a aac clip_${clip.clip_id}_1080x1920.mp4`;
     navigator.clipboard.writeText(ffmpegCommand);
-    setCopiedCmd(true);
-    window.setTimeout(() => setCopiedCmd(false), 1800);
+    setIsDropdownOpen(false);
+    triggerToast('FFmpeg 1080p 60fps CLI copied');
   };
 
   return (
-    <div className="flex flex-col border border-slate-800 bg-[#111827] rounded-xl p-5">
+    <div className="flex flex-col bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-5 shadow-xl shadow-violet-950/15 relative">
       {videoFileUrl && (
         <video
           ref={videoRef}
@@ -859,33 +934,37 @@ export default function VerticalShortPlayer({
         />
       )}
 
-      <div className="flex items-center justify-between gap-4 mb-3">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-100">
-            SOTA 9:16 Monitor · {captionPreset}
-          </h3>
-          <p className="text-xs text-slate-400 font-mono tabular-nums mt-0.5">
-            Clip #{clip.clip_id} · {clip.start_time} → {clip.end_time} (
-            {clipDuration.toFixed(1)}s)
+      {/* Card Top Header: Title, Timecode & Safe-Zone Overlay Toggle */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+            <h3 className="text-sm font-semibold text-white truncate">
+              9:16 Vertical Preview Card
+            </h3>
+          </div>
+          <p className="text-[11px] text-slate-400 font-mono tabular-nums mt-0.5 truncate">
+            Clip #{clip.clip_id} · {clip.start_time} → {clip.end_time}
           </p>
         </div>
 
         <button
           type="button"
           onClick={() => setShowSafeZoneGuides((prev) => !prev)}
-          className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
             showSafeZoneGuides
-              ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
-              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+              ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.15)]'
+              : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-slate-200'
           }`}
         >
           <Eye className="w-3.5 h-3.5" />
-          Safe Zone Guide
+          <span>Safe-Zone Overlay</span>
         </button>
       </div>
 
-      {/* 9:16 Vertical Viewport Frame */}
-      <div className="relative mx-auto w-full max-w-[270px] aspect-[9/16] rounded-lg overflow-hidden border border-slate-800 bg-black shadow-lg">
+      {/* 1. 9:16 Aspect Ratio Container (aspect-[9/16]) Centered in Sleek Glassmorphism Card */}
+      <div className="relative mx-auto w-full max-w-[290px] aspect-[9/16] rounded-xl overflow-hidden border border-slate-800/90 bg-slate-950 shadow-2xl select-none">
+        {/* Live 9:16 HTML5 Canvas Renderer */}
         <canvas
           ref={canvasRef}
           width={540}
@@ -894,23 +973,102 @@ export default function VerticalShortPlayer({
           className="w-full h-full object-cover cursor-pointer"
         />
 
-        {/* Playback Scrubber Bar */}
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3">
-          <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mb-2">
+        {/* Top Bar Inside 9:16 Viewport: Quality Selector Badge (1080p 60fps) & Preset Tag */}
+        <div className="pointer-events-none absolute top-3 inset-x-3 flex items-center justify-between gap-2 z-10">
+          <span className="px-2 py-0.5 rounded-md bg-slate-950/80 border border-slate-700/80 text-[10px] font-mono text-slate-300 backdrop-blur-sm">
+            {captionPreset}
+          </span>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setQualityMode((q) =>
+                q === '1080p 60fps' ? '4K 60fps' : '1080p 60fps'
+              );
+            }}
+            className="pointer-events-auto px-2 py-0.5 rounded-md bg-violet-500/20 border border-violet-400/40 text-[10px] font-mono font-semibold text-violet-200 backdrop-blur-sm hover:bg-violet-500/30 transition-colors cursor-pointer"
+          >
+            {qualityMode}
+          </button>
+        </div>
+
+        {/* 2. SIMULATED OVERLAY SAFE-ZONES (TikTok / Reels / Shorts UI Boundaries) */}
+        {showSafeZoneGuides && (
+          <div className="pointer-events-none absolute inset-0 z-10">
+            {/* Inner Safe Action Area Dashed Guide Box */}
+            <div className="absolute top-12 left-3 right-14 bottom-32 border border-dashed border-cyan-400/55 rounded-lg">
+              <span className="absolute top-1.5 left-2 px-1.5 py-0.5 rounded bg-slate-950/85 text-[9px] font-mono text-cyan-300 tracking-wide">
+                SAFE CAPTION &amp; FACE ZONE
+              </span>
+            </div>
+
+            {/* Right-Side TikTok / Reels Action Buttons Exclusion Zone */}
+            <div className="absolute right-2 bottom-28 w-11 py-2.5 rounded-xl border border-dashed border-rose-500/60 bg-rose-950/25 backdrop-blur-[2px] flex flex-col items-center gap-3.5">
+              <span className="text-[8px] font-mono font-semibold text-rose-300 uppercase tracking-tighter">
+                UI Zone
+              </span>
+              <div className="flex flex-col items-center gap-0.5 text-white/75">
+                <Heart className="w-4 h-4 text-rose-400/80" />
+                <span className="text-[8px] font-mono">48.2K</span>
+              </div>
+              <div className="flex flex-col items-center gap-0.5 text-white/75">
+                <MessageCircle className="w-4 h-4" />
+                <span className="text-[8px] font-mono">1,420</span>
+              </div>
+              <div className="flex flex-col items-center gap-0.5 text-white/75">
+                <Bookmark className="w-4 h-4" />
+                <span className="text-[8px] font-mono">9.1K</span>
+              </div>
+              <div className="flex flex-col items-center gap-0.5 text-white/75">
+                <Disc3 className="w-4 h-4 text-cyan-300 animate-spin" />
+              </div>
+            </div>
+
+            {/* Bottom Captions / Author Handle / Audio Ticker Exclusion Zone */}
+            <div className="absolute inset-x-2.5 bottom-14 h-14 rounded-lg border border-dashed border-amber-400/60 bg-amber-950/25 backdrop-blur-[2px] px-2.5 py-1.5 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-[9px] font-mono text-amber-300">
+                <span>@creator_handle · Follow</span>
+                <span>BOTTOM UI EXCLUSION</span>
+              </div>
+              <div className="text-[9px] text-slate-300/80 truncate font-sans">
+                {clip.title} #shorts #viral #ai
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 3. CUSTOM VIDEO CONTROL BAR (Play/Pause, Timeline Scrubber, Timecode & Quality Badge) */}
+        <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent pt-5 pb-2.5 px-3">
+          {/* Interactive Timeline Scrubber Bar */}
+          <div
+            ref={scrubberRef}
+            onClick={handleScrubberClick}
+            className="group relative w-full h-2 flex items-center cursor-pointer mb-2"
+          >
+            <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-violet-500 to-cyan-400 origin-left"
+                style={{
+                  transform: `scaleX(${Math.min(1, elapsedInClip / clipDuration)})`,
+                }}
+              />
+            </div>
             <div
-              className="h-full bg-amber-400 transition-transform duration-100 origin-left"
+              className="absolute h-3 w-3 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.9)] -translate-x-1/2 transition-transform group-hover:scale-125"
               style={{
-                transform: `scaleX(${Math.min(1, elapsedInClip / clipDuration)})`,
+                left: `${Math.min(100, (elapsedInClip / clipDuration) * 100)}%`,
               }}
             />
           </div>
-          <div className="flex items-center justify-between text-xs text-slate-200 font-mono tabular-nums">
-            <div className="flex items-center gap-2">
+
+          <div className="flex items-center justify-between gap-2 text-[11px] text-slate-200 font-mono tabular-nums">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={togglePlay}
-                className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors"
-                aria-label={isPlaying ? 'Pause preview' : 'Play preview'}
+                className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                aria-label={isPlaying ? 'Pause video' : 'Play video'}
               >
                 {isPlaying ? (
                   <Pause className="w-3.5 h-3.5" />
@@ -921,75 +1079,133 @@ export default function VerticalShortPlayer({
               <button
                 type="button"
                 onClick={restartClip}
-                className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors"
+                className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
                 aria-label="Restart clip"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
-              {videoFileUrl && (
-                <button
-                  type="button"
-                  onClick={() => setIsMuted((m) => !m)}
-                  className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors"
-                  aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
-                >
-                  {isMuted ? (
-                    <VolumeX className="w-3.5 h-3.5" />
-                  ) : (
-                    <Volume2 className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setIsMuted((m) => !m)}
+                className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                aria-label={isMuted ? 'Unmute' : 'Mute'}
+              >
+                {isMuted ? (
+                  <VolumeX className="w-3.5 h-3.5 text-slate-400" />
+                ) : (
+                  <Volume2 className="w-3.5 h-3.5 text-cyan-300" />
+                )}
+              </button>
             </div>
-            <span>
-              {elapsedInClip.toFixed(1)}s / {clipDuration.toFixed(1)}s
+
+            {/* Current Time vs Total Duration */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-white font-semibold">
+                {formatPlayerTime(elapsedInClip)}
+              </span>
+              <span className="text-slate-500">/</span>
+              <span className="text-slate-400">
+                {formatPlayerTime(clipDuration)}
+              </span>
+            </div>
+
+            {/* Quality Selector Badge */}
+            <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] text-cyan-300 font-semibold">
+              {qualityMode}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Render & Export Controls */}
-      <div className="mt-4 space-y-2.5">
+      {/* Toast Notification Feedback */}
+      {feedbackToast && (
+        <div className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center justify-center gap-1.5">
+          <Check className="w-3.5 h-3.5" />
+          <span>{feedbackToast}</span>
+        </div>
+      )}
+
+      {/* 4. DOWNLOAD ACTIONS: Primary Glow Button + Export Options Dropdown */}
+      <div className="mt-4 flex items-center gap-2 relative" ref={dropdownRef}>
+        {/* Primary Glow "Download MP4 (1080x1920)" Button */}
         <button
           type="button"
           onClick={handleRenderAndDownloadShort}
           disabled={isRecording}
-          className="w-full py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/50 text-slate-950 font-semibold text-xs transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+          className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-violet-600 via-indigo-500 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 disabled:opacity-50 text-white font-semibold text-xs shadow-[0_0_24px_rgba(139,92,246,0.45)] hover:shadow-[0_0_30px_rgba(34,211,238,0.55)] transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
         >
           <Download className="w-4 h-4" />
-          {isRecording
-            ? `Rendering SOTA 9:16 Short (${recordingProgress}%)...`
-            : 'Download SOTA Clip (9:16 Render)'}
+          <span>
+            {isRecording
+              ? `Rendering ${qualityMode} (${recordingProgress}%)...`
+              : 'Download MP4 (1080x1920)'}
+          </span>
         </button>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={handleDownloadAssSubtitles}
-            className="py-2 px-3 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
-          >
-            <FileCode2 className="w-3.5 h-3.5 text-amber-400" />
-            Export Karaoke .ASS
-          </button>
+        {/* Dropdown Menu Trigger for "Copy Share Link" and "Export Subtitles (.ASS)" */}
+        <button
+          type="button"
+          onClick={() => setIsDropdownOpen((o) => !o)}
+          aria-expanded={isDropdownOpen}
+          aria-label="More export and share options"
+          className="h-10 px-3 rounded-xl border border-slate-700/90 bg-slate-950/90 hover:bg-slate-800 text-slate-200 text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+        >
+          <span>Options</span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 transition-transform duration-150 ${
+              isDropdownOpen ? 'rotate-180 text-cyan-400' : ''
+            }`}
+          />
+        </button>
 
-          <button
-            type="button"
-            onClick={copyFfmpegCommand}
-            className="py-2 px-3 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
-          >
-            {copiedCmd ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                Copied SOTA CLI
-              </>
-            ) : (
-              <>
-                <FileCode2 className="w-3.5 h-3.5 text-sky-400" />
-                Copy SOTA FFmpeg CLI
-              </>
-            )}
-          </button>
-        </div>
+        {/* Dropdown Menu */}
+        {isDropdownOpen && (
+          <div className="absolute right-0 bottom-12 w-56 rounded-xl border border-slate-800 bg-slate-950/95 backdrop-blur-xl p-1.5 shadow-2xl z-30 space-y-1">
+            <button
+              type="button"
+              onClick={handleCopyShareLink}
+              className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-900 hover:text-cyan-300 transition-colors flex items-center gap-2.5 cursor-pointer"
+            >
+              <Share2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <div>
+                <div className="font-semibold">Copy Share Link</div>
+                <div className="text-[10px] text-slate-400">
+                  Time-stamped preview URL
+                </div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownloadAssSubtitles}
+              className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-900 hover:text-violet-300 transition-colors flex items-center gap-2.5 cursor-pointer"
+            >
+              <FileCode2 className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+              <div>
+                <div className="font-semibold">Export Subtitles (.ASS)</div>
+                <div className="text-[10px] text-slate-400">
+                  Hormozi Karaoke \k tags
+                </div>
+              </div>
+            </button>
+
+            <div className="border-t border-slate-800/80 my-1" />
+
+            <button
+              type="button"
+              onClick={handleCopyFfmpegCli}
+              className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-900 hover:text-emerald-300 transition-colors flex items-center gap-2.5 cursor-pointer"
+            >
+              <Terminal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <div>
+                <div className="font-semibold">Copy FFmpeg 9:16 CLI</div>
+                <div className="text-[10px] text-slate-400">
+                  1080×1920 60fps render command
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

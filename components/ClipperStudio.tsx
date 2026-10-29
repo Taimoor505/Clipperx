@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Upload,
   Youtube,
@@ -10,21 +10,24 @@ import {
   Copy,
   Check,
   Code2,
-  Sliders,
   AlertCircle,
   Film,
   Terminal,
-  Trash2,
-  Music,
-  ScanFace,
-  ZoomIn,
-  Type as TypeIcon,
+  Loader2,
+  Plus,
+  Clapperboard,
+  SlidersHorizontal,
+  Play,
+  Flame,
+  Clock,
+  Wand2,
 } from 'lucide-react';
 import VerticalShortPlayer, {
   ViralClipSegment,
   CaptionPresetName,
   timestampToSeconds,
 } from './VerticalShortPlayer';
+import PipelineProgressModal from './PipelineProgressModal';
 import {
   STREAMLIT_APP_PY_CODE,
   REQUIREMENTS_TXT,
@@ -32,6 +35,22 @@ import {
   FFMPEG_SOTA_FILTER_COMPLEX,
   detectContextualEmojis,
 } from '@/lib/python-script';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
 
 type PipelineStep =
   | 'idle'
@@ -47,7 +66,7 @@ const INITIAL_DEMO_CLIPS: ViralClipSegment[] = [
     start_time: '00:04:12.500',
     end_time: '00:04:58.200',
     duration_seconds: 45.7,
-    virality_score: 94,
+    virality_score: 96,
     hook_transcript:
       'Stop cutting short-form video on fixed time intervals—you are destroying the speaker cadence.',
     reasoning:
@@ -97,11 +116,50 @@ const INITIAL_DEMO_CLIPS: ViralClipSegment[] = [
   },
   {
     clip_id: 2,
+    title: 'The Zero-Jitter EMA Face Reframing Formula Explained',
+    start_time: '00:11:30.000',
+    end_time: '00:12:14.400',
+    duration_seconds: 44.4,
+    virality_score: 92,
+    hook_transcript:
+      'Never center-crop a two-person podcast without an exponential moving average filter.',
+    reasoning:
+      'Delivers an immediately applicable computer-vision formula (x = clamp(X_face - 540)) with a strong visual payoff.',
+    transcript_lines: [
+      {
+        start_offset: 0.0,
+        end_offset: 5.0,
+        text: 'Never center-crop a podcast without exponential smoothing',
+      },
+      {
+        start_offset: 5.0,
+        end_offset: 13.0,
+        text: 'raw MediaPipe bounding boxes jitter on every head nod.',
+      },
+      {
+        start_offset: 13.0,
+        end_offset: 24.0,
+        text: 'Clamp X_face minus 540 and apply a 0.15 EMA weight',
+      },
+      {
+        start_offset: 24.0,
+        end_offset: 35.0,
+        text: 'so the 9:16 virtual camera glides like a human operator.',
+      },
+      {
+        start_offset: 35.0,
+        end_offset: 44.4,
+        text: 'That is how top creators win retention on Shorts.',
+      },
+    ],
+  },
+  {
+    clip_id: 3,
     title: 'The Hidden Cost of Unbuffered FFmpeg Subprocess Calls',
     start_time: '00:18:04.000',
     end_time: '00:18:46.500',
     duration_seconds: 42.5,
-    virality_score: 89,
+    virality_score: 87,
     hook_transcript:
       'We crashed a 64-core render node in twelve seconds because of one missing FFmpeg flag.',
     reasoning:
@@ -135,12 +193,12 @@ const INITIAL_DEMO_CLIPS: ViralClipSegment[] = [
     ],
   },
   {
-    clip_id: 3,
+    clip_id: 4,
     title: 'Why Lower-Third Safe Zones Decide Short-Form Click-Through',
     start_time: '00:37:20.100',
     end_time: '00:38:11.600',
     duration_seconds: 51.5,
-    virality_score: 86,
+    virality_score: 81,
     hook_transcript:
       'If your captions sit in the bottom 250 pixels of a vertical video, nobody can read them.',
     reasoning:
@@ -185,10 +243,12 @@ function secondsToTimestamp(totalSeconds: number): string {
 }
 
 export default function ClipperStudio() {
-  // Source input state
-  const [inputMode, setInputMode] = useState<'upload' | 'youtube' | 'sample'>(
-    'upload'
-  );
+  // Real API Key connection status from backend health check
+  const [apiKeyReady, setApiKeyReady] = useState<boolean>(true);
+
+  // Left Panel: Source Media & Control Center State
+  const [sourceTab, setSourceTab] = useState<string>('upload');
+  const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoFileUrl, setVideoFileUrl] = useState<string | null>(null);
   const [videoDurationSec, setVideoDurationSec] = useState<number>(2700);
@@ -197,51 +257,75 @@ export default function ClipperStudio() {
     'Deep-dive engineering interview covering multimodal AI video editing, FFmpeg filterchains, 9:16 vertical framing, and short-form viewer retention mechanics.'
   );
 
-  // SOTA Engagement Feature 5 State: Caption Presets & 4 Feature Toggles
+  // Model selector dropdown (Gemini 2.5 Flash / Gemini 2.5 Pro)
+  const [selectedModel, setSelectedModel] = useState<
+    'gemini-2.5-flash' | 'gemini-2.5-pro'
+  >('gemini-2.5-flash');
+
+  // Settings Toggles ("Burn-in Captions", "Dynamic Zoom", "Auto Face Centering", + "Audio Ducking")
+  const [burnInCaptions, setBurnInCaptions] = useState<boolean>(true);
+  const [dynamicZoom, setDynamicZoom] = useState<boolean>(true);
+  const [autoFaceCentering, setAutoFaceCentering] = useState<boolean>(true);
+  const [enableAudioDucking, setEnableAudioDucking] = useState<boolean>(true);
   const [captionPreset, setCaptionPreset] =
     useState<CaptionPresetName>('Hormozi Pop');
-  const [enableKaraoke, setEnableKaraoke] = useState<boolean>(true);
-  const [enableZoomCuts, setEnableZoomCuts] = useState<boolean>(true);
-  const [enableFaceTracking, setEnableFaceTracking] = useState<boolean>(true);
-  const [enableAudioDucking, setEnableAudioDucking] = useState<boolean>(true);
-  const [musicFileName, setMusicFileName] = useState<string>(
-    'Auto-Synthesized Ambient Synth Pad (44.1kHz WAV)'
-  );
 
   // Pipeline & Gemini analysis state
   const [pipelineStep, setPipelineStep] = useState<PipelineStep>('idle');
   const [pipelinePercent, setPipelinePercent] = useState<number>(0);
   const [pipelineStatusText, setPipelineStatusText] = useState<string>(
-    'Ready for source video upload or YouTube URL'
+    'Ready to analyze long-form video track'
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Clips & selection state
+  // Right Panel: Viral Clip Candidates & Timeline Preview State
   const [clips, setClips] = useState<ViralClipSegment[]>(INITIAL_DEMO_CLIPS);
   const [selectedClipId, setSelectedClipId] = useState<number>(1);
+  const [candidateFilterTab, setCandidateFilterTab] = useState<string>('all');
   const [renderedClipIds, setRenderedClipIds] = useState<number[]>([]);
+  const [renderingClipId, setRenderingClipId] = useState<number | null>(null);
 
-  // Code inspector state
+  // Code Modal / Tab state
   const [activeCodeTab, setActiveCodeTab] = useState<
     'app_py' | 'stage1_prompt' | 'stage2_ffmpeg' | 'requirements'
   >('app_py');
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const musicInputRef = useRef<HTMLInputElement | null>(null);
+  const previewSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // Check server-side Gemini API key availability on mount
+  useEffect(() => {
+    fetch('/api/analyze')
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof d.apiKeyConfigured === 'boolean') {
+          setApiKeyReady(d.apiKeyConfigured);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Always keep clips ordered by Virality Score descending
+  const sortedClips = [...clips].sort(
+    (a, b) => b.virality_score - a.virality_score
+  );
+
+  const filteredClips = sortedClips.filter((clip) => {
+    if (candidateFilterTab === 'high') return clip.virality_score >= 90;
+    if (candidateFilterTab === 'medium')
+      return clip.virality_score >= 75 && clip.virality_score < 90;
+    return true;
+  });
 
   const selectedClip =
-    clips.find((c) => c.clip_id === selectedClipId) || clips[0];
+    sortedClips.find((c) => c.clip_id === selectedClipId) || sortedClips[0];
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const loadSelectedVideoFile = (file: File) => {
     setErrorMessage(null);
-
     if (videoFileUrl) {
       URL.revokeObjectURL(videoFileUrl);
     }
-
     const url = URL.createObjectURL(file);
     setVideoFile(file);
     setVideoFileUrl(url);
@@ -256,12 +340,19 @@ export default function ClipperStudio() {
     };
   };
 
-  const handleMusicFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    setMusicFileName(`${file.name} (${(file.size / 1024).toFixed(0)} KB)`);
+    if (file) loadSelectedVideoFile(file);
   };
 
+  const handleDropFile = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) loadSelectedVideoFile(file);
+  };
+
+  // Sample up to 4 keyframes from uploaded local video for multimodal Gemini analysis
   const extractKeyframesFromVideo = async (
     fileUrl: string
   ): Promise<Array<{ mimeType: string; data: string }>> => {
@@ -299,7 +390,7 @@ export default function ClipperStudio() {
               }
             }
           } catch {
-            // Continue if frame seek fails
+            // Continue if seek fails
           }
         }
         resolve(frames);
@@ -309,19 +400,22 @@ export default function ClipperStudio() {
     });
   };
 
-  const handleRunGeminiAnalysis = async () => {
+  // Primary Action: Analyze & Detect Clips
+  const handleAnalyzeAndDetectClips = async () => {
     setErrorMessage(null);
 
-    if (inputMode === 'youtube' && !youtubeUrl.trim()) {
-      setErrorMessage('Please enter a valid YouTube URL before running analysis.');
+    if (sourceTab === 'youtube' && !youtubeUrl.trim()) {
+      setErrorMessage(
+        'Please paste a valid YouTube URL in the import box or switch to File Upload.'
+      );
       return;
     }
 
     try {
       setPipelineStep('uploading');
-      setPipelinePercent(20);
+      setPipelinePercent(22);
       setPipelineStatusText(
-        'Stage 1/4: Uploading video track & extracting keyframes...'
+        'Stage 1/4: Ingesting media stream & sampling keyframes...'
       );
 
       let sampledFrames: Array<{ mimeType: string; data: string }> = [];
@@ -330,9 +424,13 @@ export default function ClipperStudio() {
       }
 
       setPipelineStep('analyzing');
-      setPipelinePercent(52);
+      setPipelinePercent(56);
       setPipelineStatusText(
-        'Stage 2/4: Running Gemini Word-Level Multimodal Video Analysis...'
+        `Stage 2/4: Analyzing multimodal track with ${
+          selectedModel === 'gemini-2.5-pro'
+            ? 'Gemini 2.5 Pro'
+            : 'Gemini 2.5 Flash'
+        }...`
       );
 
       const response = await fetch('/api/analyze', {
@@ -343,10 +441,11 @@ export default function ClipperStudio() {
             videoFile?.name ||
             (youtubeUrl
               ? `YouTube: ${youtubeUrl}`
-              : 'Founder Engineering Podcast'),
+              : 'ClipperX Studio Podcast Session'),
           videoDurationSeconds: videoDurationSec,
-          youtubeUrl: inputMode === 'youtube' ? youtubeUrl : '',
+          youtubeUrl: sourceTab === 'youtube' ? youtubeUrl : '',
           transcriptContext,
+          selectedModel,
           frames: sampledFrames,
         }),
       });
@@ -359,22 +458,25 @@ export default function ClipperStudio() {
       }
 
       setPipelineStep('detecting');
-      setPipelinePercent(84);
+      setPipelinePercent(86);
       setPipelineStatusText(
-        'Stage 3/4: Building ASS Karaoke word offsets & EMA face-tracking windows...'
+        'Stage 3/4: Ranking Virality Scores & word-level karaoke boundaries...'
       );
 
-      await new Promise((r) => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 300));
 
       if (Array.isArray(data.clips) && data.clips.length > 0) {
         setClips(data.clips);
         setSelectedClipId(data.clips[0].clip_id);
+        setCandidateFilterTab('all');
       }
 
       setPipelineStep('rendering');
       setPipelinePercent(100);
       setPipelineStatusText(
-        `Stage 4/4: Ready — ${data.clips?.length || clips.length} viral segments loaded into SOTA 9:16 Renderer`
+        `Analysis Complete — ${
+          data.clips?.length || clips.length
+        } viral segments ranked by Virality Score`
       );
     } catch (err: unknown) {
       const msg =
@@ -382,10 +484,11 @@ export default function ClipperStudio() {
       setErrorMessage(msg);
       setPipelineStep('idle');
       setPipelinePercent(0);
-      setPipelineStatusText('Analysis interrupted — check error details below.');
+      setPipelineStatusText('Analysis interrupted — review message below.');
     }
   };
 
+  // Inline ±2s Start/End Timestamp Adjustments
   const handleAdjustTimestamp = (
     clipId: number,
     boundary: 'start' | 'end',
@@ -418,17 +521,37 @@ export default function ClipperStudio() {
     );
   };
 
-  const handlePurgeTempWorkspace = () => {
+  // Trigger 9:16 Short Render for a specific card
+  const handleTriggerCardRender = (clip: ViralClipSegment) => {
+    setSelectedClipId(clip.clip_id);
+    setRenderingClipId(clip.clip_id);
+    previewSectionRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    });
+    window.setTimeout(() => {
+      setRenderedClipIds((prev) =>
+        prev.includes(clip.clip_id) ? prev : [...prev, clip.clip_id]
+      );
+      setRenderingClipId(null);
+    }, 900);
+  };
+
+  // Header "New Project" Button Handler
+  const handleNewProject = () => {
     if (videoFileUrl) {
       URL.revokeObjectURL(videoFileUrl);
     }
     setVideoFile(null);
     setVideoFileUrl(null);
     setYoutubeUrl('');
+    setErrorMessage(null);
     setRenderedClipIds([]);
     setPipelineStep('idle');
     setPipelinePercent(0);
-    setPipelineStatusText('Workspace temporary files purged.');
+    setPipelineStatusText('New project initialized — upload video or paste URL');
+    setClips(INITIAL_DEMO_CLIPS);
+    setSelectedClipId(1);
   };
 
   const handleDownloadPythonFile = (filename: string, content: string) => {
@@ -456,816 +579,415 @@ export default function ClipperStudio() {
     window.setTimeout(() => setCopiedCode(false), 1800);
   };
 
+  const isAnalyzing =
+    pipelineStep === 'uploading' ||
+    pipelineStep === 'analyzing' ||
+    pipelineStep === 'detecting';
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#0B0F17] text-slate-100">
-      {/* 3-Zone Top Navigation Bar */}
-      <header className="flex items-center justify-between gap-8 px-6 py-4 border-b border-slate-800/90 bg-[#0B0F17]/95 sticky top-0 z-30 backdrop-blur-md">
-        <a
-          href="#studio"
-          className="text-lg font-bold tracking-tight text-white whitespace-nowrap shrink-0"
-        >
-          ClipForge AI
-        </a>
+    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 relative overflow-x-hidden">
+      {/* Subtle Violet / Cyan Ambient Glow Backdrop */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 overflow-hidden z-0"
+      >
+        <div className="absolute -top-40 -left-40 w-[520px] h-[520px] rounded-full bg-violet-600/12 blur-[130px]" />
+        <div className="absolute top-20 -right-40 w-[480px] h-[480px] rounded-full bg-cyan-500/10 blur-[130px]" />
+      </div>
 
-        <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-400">
-          <a
-            href="#studio"
-            className="hover:text-white transition-colors whitespace-nowrap shrink-0"
-          >
-            SOTA Studio
-          </a>
-          <a
-            href="#sota-presets"
-            className="hover:text-white transition-colors whitespace-nowrap shrink-0"
-          >
-            Presets & Toggles
-          </a>
-          <a
-            href="#candidates"
-            className="hover:text-white transition-colors whitespace-nowrap shrink-0"
-          >
-            Clip Candidates
-          </a>
-          <a
-            href="#python-code"
-            className="hover:text-white transition-colors whitespace-nowrap shrink-0"
-          >
-            Streamlit app.py
-          </a>
-        </nav>
+      {/* 1. HEADER BAR: App Logo with Gradient Badge ("ClipperX AI"), API Key Status Indicator, and "New Project" Button */}
+      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-md">
+        <div className="max-w-[1440px] mx-auto px-6 h-16 flex items-center justify-between gap-6">
+          {/* Brand Logo + Gradient Badge */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center shadow-sm shadow-violet-500/20">
+              <Scissors className="w-4 h-4 text-white" />
+            </div>
+            <div className="flex items-center gap-2.5">
+              <span className="text-lg font-bold tracking-tight text-white whitespace-nowrap">
+                ClipperX
+              </span>
+              <Badge variant="gradient">ClipperX AI</Badge>
+            </div>
+          </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={() =>
-              handleDownloadPythonFile('app.py', STREAMLIT_APP_PY_CODE)
-            }
-            className="px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Download SOTA app.py
-          </button>
+          {/* Center Status & SOTA Pipeline Summary */}
+          <div className="hidden md:flex items-center gap-6 text-xs text-slate-400">
+            <span className="font-mono">
+              9:16 Dual-Layer &amp; Face Reframing
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="font-mono">Hormozi ASS Karaoke</span>
+            <span aria-hidden="true">·</span>
+            <button
+              type="button"
+              onClick={() => setCandidateFilterTab('code')}
+              className="hover:text-cyan-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Code2 className="w-3.5 h-3.5 text-cyan-400" />
+              <span>View Python app.py</span>
+            </button>
+          </div>
+
+          {/* Right Actions: API Key Status Indicator (Green Pill Dot) + New Project Button */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div
+              title="Server-side GEMINI_API_KEY status"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/90 px-3 py-1.5 text-xs font-medium text-slate-200"
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  apiKeyReady
+                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                    : 'bg-amber-400'
+                }`}
+              />
+              <span className="whitespace-nowrap">
+                {apiKeyReady ? 'API Key Ready' : 'API Key Missing'}
+              </span>
+            </div>
+
+            <Button
+              variant="secondary"
+              size="default"
+              onClick={handleNewProject}
+            >
+              <Plus className="w-3.5 h-3.5 text-cyan-400" />
+              New Project
+            </Button>
+          </div>
         </div>
       </header>
 
-      <main className="flex-1 max-w-[1380px] w-full mx-auto px-6 py-8 space-y-12">
-        {/* Hero & Pipeline Header */}
-        <section id="studio" className="space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pb-6 border-b border-slate-800/80">
-            <div className="max-w-2xl space-y-2">
-              <p className="text-xs font-mono text-amber-400 tracking-wide">
-                HORMOZI ASS KARAOKE · 1.12x ZOOM BEATS · MEDIAPIPE FACE LOCK ·
-                SIDECHAIN DUCKING
-              </p>
-              <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-white text-balance">
-                AI Short-Form Video Clipper Engine (SOTA Edition)
-              </h1>
-              <p className="text-sm sm:text-base text-slate-400 leading-relaxed">
-                Extract word-level timestamps with Gemini, render Alex
-                Hormozi-style ASS karaoke captions with contextual emojis,
-                apply 1.12x punch-in zoom beats, auto-reframe speakers with
-                OpenCV/MediaPipe EMA smoothing, and duck ambient music via
-                FFmpeg sidechain compression.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 shrink-0">
-              <a
-                href="#python-code"
-                className="px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-medium text-slate-200 transition-colors flex items-center gap-2 whitespace-nowrap shrink-0"
-              >
-                <Code2 className="w-4 h-4 text-amber-400" />
-                Inspect Refactored app.py
-              </a>
-              <button
-                type="button"
-                onClick={handlePurgeTempWorkspace}
-                className="px-3.5 py-2.5 rounded-lg border border-slate-800 bg-slate-900/60 hover:bg-slate-800 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Purge Temp Files
-              </button>
-            </div>
-          </div>
-
-          {/* 4-Stage Pipeline Progress Tracker */}
-          <div className="border border-slate-800 bg-[#111827] rounded-xl p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs text-slate-300 font-medium">
-                <Film className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>{pipelineStatusText}</span>
-              </div>
-              <span className="text-xs font-mono tabular-nums text-slate-400">
-                Pipeline Completion: {pipelinePercent}%
-              </span>
-            </div>
-
-            <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-amber-400 transition-transform duration-200 origin-left"
-                style={{ transform: `scaleX(${pipelinePercent / 100})` }}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1 text-xs font-mono tabular-nums">
-              <div
-                className={`${
-                  pipelinePercent >= 20 ? 'text-amber-300' : 'text-slate-500'
-                }`}
-              >
-                01. Uploading Source
-              </div>
-              <div
-                className={`${
-                  pipelinePercent >= 50 ? 'text-amber-300' : 'text-slate-500'
-                }`}
-              >
-                02. Gemini Word-Level Analysis
-              </div>
-              <div
-                className={`${
-                  pipelinePercent >= 80 ? 'text-amber-300' : 'text-slate-500'
-                }`}
-              >
-                03. Karaoke & Face Lock
-              </div>
-              <div
-                className={`${
-                  pipelinePercent === 100
-                    ? 'text-emerald-400'
-                    : 'text-slate-500'
-                }`}
-              >
-                04. FFmpeg SOTA 9:16 Render
-              </div>
-            </div>
-          </div>
-
-          {/* Source Video Input Bar */}
-          <div className="border border-slate-800 bg-[#111827] rounded-xl p-6 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-base font-semibold text-white">
-                  01. Source Long-Form Video Track
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Upload MP4, MOV, or WebM up to 2GB, paste a YouTube URL, or
-                  analyze the studio podcast track with Gemini.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg self-start">
-                <button
-                  type="button"
-                  onClick={() => setInputMode('upload')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
-                    inputMode === 'upload'
-                      ? 'bg-slate-800 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  Video Upload (≤2GB)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInputMode('youtube')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
-                    inputMode === 'youtube'
-                      ? 'bg-slate-800 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Youtube className="w-3.5 h-3.5" />
-                  YouTube URL
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInputMode('sample')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
-                    inputMode === 'sample'
-                      ? 'bg-slate-800 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Film className="w-3.5 h-3.5" />
-                  Podcast Track
-                </button>
-              </div>
-            </div>
-
-            {inputMode === 'upload' && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-center">
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="lg:col-span-2 border border-dashed border-slate-700 hover:border-amber-400/60 bg-slate-900/50 rounded-lg p-5 cursor-pointer transition-colors flex items-center justify-between gap-4"
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-slate-200">
-                      {videoFile
-                        ? `${videoFile.name} (${(
-                            videoFile.size /
-                            (1024 * 1024)
-                          ).toFixed(1)} MB)`
-                        : 'Click to select MP4, MOV, or WebM video file (up to 2GB)'}
-                    </p>
-                    <p className="text-xs text-slate-400 font-mono tabular-nums">
-                      {videoFile
-                        ? `Detected Duration: ${secondsToTimestamp(
-                            videoDurationSec
-                          )} · Keyframe & face detection ready`
-                        : 'Or run Gemini multimodal analysis directly with the transcript context on the right'}
-                    </p>
+      {/* 2. MAIN GRID: Two-Column Split (Left 40% / Right 60%) */}
+      <main className="relative z-10 flex-1 max-w-[1440px] w-full mx-auto px-6 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* ===============================================================
+              LEFT PANEL (40% width -> 5 of 12 cols): Source Media & Control Center
+             =============================================================== */}
+          <div className="lg:col-span-5 space-y-5">
+            <Card className="border-slate-800/90 bg-slate-900/55 shadow-lg shadow-violet-950/10">
+              <CardHeader className="pb-4 border-b border-slate-800/80">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Clapperboard className="w-4 h-4 text-violet-400" />
+                    <CardTitle>Source Media &amp; Control Center</CardTitle>
                   </div>
-                  <span className="px-3 py-1.5 rounded-md bg-slate-800 text-xs font-medium text-slate-200 whitespace-nowrap shrink-0">
-                    Browse File
+                  <span className="text-[11px] font-mono text-slate-400 tabular-nums">
+                    Max 2GB · 30m–2h
                   </span>
                 </div>
+                <CardDescription>
+                  Ingest horizontal 16:9 footage or YouTube streams, configure
+                  Gemini multimodal detection, and toggle SOTA 9:16 rendering
+                  filters.
+                </CardDescription>
+              </CardHeader>
 
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-medium text-slate-300">
-                    Audio / Topic Context for Gemini Prompt
+              <CardContent className="pt-5 space-y-6">
+                {/* Video Input Tabs: "File Upload (Drag & Drop up to 2GB)" and "YouTube URL Import" */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-200 block">
+                    1. Source Video Input
                   </label>
-                  <input
-                    type="text"
-                    value={transcriptContext}
-                    onChange={(e) => setTranscriptContext(e.target.value)}
-                    placeholder="Optional speaker topic or transcript notes..."
-                    className="w-full px-3 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-              </div>
-            )}
+                  <Tabs value={sourceTab} onValueChange={setSourceTab}>
+                    <TabsList className="w-full grid grid-cols-2">
+                      <TabsTrigger value="upload">
+                        <Upload className="w-3.5 h-3.5 text-violet-400" />
+                        File Upload (≤2GB)
+                      </TabsTrigger>
+                      <TabsTrigger value="youtube">
+                        <Youtube className="w-3.5 h-3.5 text-cyan-400" />
+                        YouTube URL Import
+                      </TabsTrigger>
+                    </TabsList>
 
-            {inputMode === 'youtube' && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2 space-y-1.5">
-                  <label className="block text-xs font-medium text-slate-300">
-                    Public YouTube Video URL (30 mins – 2 hours)
-                  </label>
-                  <input
-                    type="url"
-                    value={youtubeUrl}
-                    onChange={(e) => setYoutubeUrl(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-                    className="w-full px-3.5 py-2.5 text-sm font-mono bg-slate-900 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-medium text-slate-300">
-                    Episode Context / Notes
-                  </label>
-                  <input
-                    type="text"
-                    value={transcriptContext}
-                    onChange={(e) => setTranscriptContext(e.target.value)}
-                    className="w-full px-3 py-2.5 text-sm bg-slate-900 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-              </div>
-            )}
+                    {/* Tab 1: Drag & Drop File Upload up to 2GB */}
+                    <TabsContent value="upload" className="space-y-3">
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsDraggingOver(true);
+                        }}
+                        onDragLeave={() => setIsDraggingOver(false)}
+                        onDrop={handleDropFile}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`rounded-xl border-2 border-dashed p-5 text-center cursor-pointer transition-all ${
+                          isDraggingOver
+                            ? 'border-cyan-400 bg-cyan-500/10'
+                            : videoFile
+                              ? 'border-violet-500/50 bg-violet-500/5'
+                              : 'border-slate-800 hover:border-slate-700 bg-slate-950/60'
+                        }`}
+                      >
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                        <div className="mx-auto w-10 h-10 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mb-2.5">
+                          <Upload className="w-4 h-4 text-violet-400" />
+                        </div>
+                        {videoFile ? (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-white truncate max-w-xs mx-auto">
+                              {videoFile.name}
+                            </p>
+                            <p className="text-[11px] font-mono text-cyan-300 tabular-nums">
+                              {(videoFile.size / (1024 * 1024)).toFixed(1)} MB ·
+                              Duration {secondsToTimestamp(videoDurationSec)}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-slate-200">
+                              Drag &amp; drop MP4, MOV, or WebM here, or click
+                              to browse
+                            </p>
+                            <p className="text-[11px] text-slate-400 font-mono">
+                              Supports long-form 16:9 recordings up to 2GB
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </TabsContent>
 
-            {inputMode === 'sample' && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
-                <div className="lg:col-span-2 space-y-1.5">
-                  <label className="block text-xs font-medium text-slate-300">
-                    Podcast / Interview Topic or Transcript Excerpt for Gemini
-                    Detection
-                  </label>
-                  <input
-                    type="text"
-                    value={transcriptContext}
-                    onChange={(e) => setTranscriptContext(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-medium text-slate-300">
-                    Source Duration (Seconds)
-                  </label>
-                  <input
-                    type="number"
-                    min={120}
-                    max={7200}
-                    value={videoDurationSec}
-                    onChange={(e) =>
-                      setVideoDurationSec(Number(e.target.value) || 2700)
-                    }
-                    className="w-full px-3.5 py-2.5 text-xs font-mono tabular-nums bg-slate-900 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-              </div>
-            )}
+                    {/* Tab 2: YouTube URL Import */}
+                    <TabsContent value="youtube" className="space-y-3">
+                      <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                        <label className="block text-xs font-medium text-slate-300">
+                          Public YouTube Video URL
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="url"
+                            value={youtubeUrl}
+                            onChange={(e) => setYoutubeUrl(e.target.value)}
+                            placeholder="https://www.youtube.com/watch?v=..."
+                            className="w-full px-3.5 py-2 text-xs font-mono bg-slate-900 border border-slate-800 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-violet-500"
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Uses <code className="font-mono text-slate-300">yt-dlp</code>{' '}
+                          stream extraction + Gemini multimodal transcript
+                          analysis.
+                        </p>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
 
-            {errorMessage && (
-              <div className="p-3.5 rounded-lg border border-red-500/40 bg-red-500/10 text-red-200 text-xs flex items-center gap-2.5">
-                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-800/80">
-              <p className="text-xs text-slate-400 font-mono">
-                Schema: Word-level timestamps (`word`, `start_time`, `end_time`)
-                + contextual emoji extraction
-              </p>
-
-              <button
-                type="button"
-                onClick={handleRunGeminiAnalysis}
-                disabled={
-                  pipelineStep === 'uploading' ||
-                  pipelineStep === 'analyzing' ||
-                  pipelineStep === 'detecting'
-                }
-                className="px-5 py-2.5 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:bg-amber-400/50 text-slate-950 font-semibold text-xs transition-colors flex items-center gap-2 whitespace-nowrap shrink-0"
-              >
-                <Sparkles className="w-4 h-4" />
-                {pipelineStep === 'uploading' ||
-                pipelineStep === 'analyzing' ||
-                pipelineStep === 'detecting'
-                  ? 'Running Gemini Word-Level Analysis...'
-                  : 'Run Gemini Clip & Karaoke Detection'}
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* FEATURE 5: SOTA Engagement Controls, Caption Style Presets & Live Static Preset Preview */}
-        <section
-          id="sota-presets"
-          className="border border-slate-800 bg-[#111827] rounded-xl p-6 space-y-6"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
-            <div>
-              <h2 className="text-base font-semibold text-white">
-                02. SOTA Engagement Configuration & Live Preset Preview
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Configure Caption Style Presets, Word-by-Word ASS Karaoke,
-                1.12x Zoom Cuts, MediaPipe EMA Face Tracking, and Sidechain
-                Audio Ducking.
-              </p>
-            </div>
-
-            {/* Caption Style Preset Selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 whitespace-nowrap">
-                Caption Preset:
-              </span>
-              <div className="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg">
-                {(
-                  [
-                    'Hormozi Pop',
-                    'Minimalist Clean',
-                    'Cyber Neon',
-                  ] as CaptionPresetName[]
-                ).map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setCaptionPreset(preset)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
-                      captionPreset === preset
-                        ? 'bg-amber-400 text-slate-950 font-semibold'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-            {/* Left 7 Columns: 4 SOTA Feature Toggles + Ambient Music Upload */}
-            <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="border border-slate-800 bg-slate-900/60 hover:border-slate-700 rounded-lg p-4 cursor-pointer flex items-start gap-3 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={enableKaraoke}
-                  onChange={(e) => setEnableKaraoke(e.target.checked)}
-                  className="mt-0.5 rounded border-slate-700 bg-slate-950 text-amber-400 focus:ring-0"
-                />
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
-                    <TypeIcon className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Enable Word-by-Word Karaoke Highlighting</span>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Uses ASS <code className="font-mono text-slate-300">\k</code>{' '}
-                    centisecond tags + active word{' '}
-                    <code className="font-mono text-slate-300">
-                      \fscx110\fscy110
-                    </code>{' '}
-                    pop and automatic contextual emoji injection.
-                  </p>
-                </div>
-              </label>
-
-              <label className="border border-slate-800 bg-slate-900/60 hover:border-slate-700 rounded-lg p-4 cursor-pointer flex items-start gap-3 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={enableZoomCuts}
-                  onChange={(e) => setEnableZoomCuts(e.target.checked)}
-                  className="mt-0.5 rounded border-slate-700 bg-slate-950 text-amber-400 focus:ring-0"
-                />
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
-                    <ZoomIn className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Enable Dynamic Zoom Cuts (1.12x)</span>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Alternates 1.0x and 1.12x punch-in zoom (
-                    <code className="font-mono text-slate-300">
-                      scale=iw*1.12:-1,crop=iw/1.12:ih/1.12
-                    </code>
-                    ) on sentence transitions.
-                  </p>
-                </div>
-              </label>
-
-              <label className="border border-slate-800 bg-slate-900/60 hover:border-slate-700 rounded-lg p-4 cursor-pointer flex items-start gap-3 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={enableFaceTracking}
-                  onChange={(e) => setEnableFaceTracking(e.target.checked)}
-                  className="mt-0.5 rounded border-slate-700 bg-slate-950 text-amber-400 focus:ring-0"
-                />
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
-                    <ScanFace className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Enable Smart Face Tracking Auto-Crop</span>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    MediaPipe / OpenCV speaker bounding box detection with EMA
-                    smoothing (
-                    <code className="font-mono text-slate-300">
-                      x = clamp(X_face - 540, 0, max_x)
-                    </code>
-                    ).
-                  </p>
-                </div>
-              </label>
-
-              <div className="border border-slate-800 bg-slate-900/60 hover:border-slate-700 rounded-lg p-4 flex flex-col justify-between gap-3 transition-colors">
-                <label className="cursor-pointer flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={enableAudioDucking}
-                    onChange={(e) => setEnableAudioDucking(e.target.checked)}
-                    className="mt-0.5 rounded border-slate-700 bg-slate-950 text-amber-400 focus:ring-0"
-                  />
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
-                      <Music className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Enable Background Music Ducking</span>
+                  {/* Optional Topic / Transcript Context */}
+                  <div className="pt-1 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400">
+                      <span>Topic / Audio Context Hint</span>
+                      <span className="font-mono tabular-nums">
+                        Source length: {Math.floor(videoDurationSec / 60)}m
+                      </span>
                     </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      FFmpeg{' '}
-                      <code className="font-mono text-slate-300">
-                        sidechaincompress=threshold=0.08:ratio=4:attack=20:release=300
-                      </code>
-                      .
-                    </p>
-                  </div>
-                </label>
-
-                {enableAudioDucking && (
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
                     <input
-                      ref={musicInputRef}
-                      type="file"
-                      accept="audio/mpeg,audio/wav,.mp3,.wav"
-                      onChange={handleMusicFileChange}
-                      className="hidden"
+                      type="text"
+                      value={transcriptContext}
+                      onChange={(e) => setTranscriptContext(e.target.value)}
+                      placeholder="Describe podcast topic or paste transcript excerpt..."
+                      className="w-full px-3 py-2 text-xs bg-slate-950/80 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-violet-500"
                     />
-                    <span className="text-[11px] font-mono text-slate-400 truncate">
-                      {musicFileName}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => musicInputRef.current?.click()}
-                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-medium text-slate-200 whitespace-nowrap shrink-0"
+                  </div>
+                </div>
+
+                {/* Model Selector Dropdown (Gemini 2.5 Flash / Gemini 2.5 Pro) */}
+                <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="model-select"
+                      className="text-xs font-semibold text-slate-200 flex items-center gap-1.5"
                     >
-                      Upload MP3/WAV
-                    </button>
+                      <Wand2 className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>2. Multimodal Analysis Model</span>
+                    </label>
+                    <span className="text-[11px] font-mono text-violet-300">
+                      Structured JSON Schema
+                    </span>
+                  </div>
+
+                  <select
+                    id="model-select"
+                    value={selectedModel}
+                    onChange={(e) =>
+                      setSelectedModel(
+                        e.target.value as 'gemini-2.5-flash' | 'gemini-2.5-pro'
+                      )
+                    }
+                    className="w-full h-9 px-3 rounded-lg bg-slate-950 border border-slate-800 text-xs font-medium text-slate-100 focus:outline-none focus:border-violet-500 cursor-pointer"
+                  >
+                    <option value="gemini-2.5-flash">
+                      Gemini 2.5 Flash — Fast Multimodal Hook &amp; Timestamp
+                      Detection
+                    </option>
+                    <option value="gemini-2.5-pro">
+                      Gemini 2.5 Pro — Deep Semantic Narrative &amp; Virality
+                      Reasoning
+                    </option>
+                  </select>
+                </div>
+
+                {/* Settings Toggles: "Burn-in Captions", "Dynamic Zoom", "Auto Face Centering" */}
+                <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-violet-400" />
+                      <span>3. SOTA 9:16 Rendering Settings</span>
+                    </span>
+                    <select
+                      aria-label="Caption Preset Theme"
+                      value={captionPreset}
+                      onChange={(e) =>
+                        setCaptionPreset(e.target.value as CaptionPresetName)
+                      }
+                      className="h-7 px-2 rounded-md bg-slate-950 border border-slate-800 text-[11px] font-medium text-cyan-300 focus:outline-none focus:border-violet-500 cursor-pointer"
+                    >
+                      <option value="Hormozi Pop">Preset: Hormozi Pop</option>
+                      <option value="Minimalist Clean">
+                        Preset: Minimalist Clean
+                      </option>
+                      <option value="Cyber Neon">Preset: Cyber Neon</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {/* Toggle 1: Burn-in Captions */}
+                    <div className="flex items-center justify-between rounded-lg border border-slate-800/90 bg-slate-950/60 px-3.5 py-2.5">
+                      <div className="pr-3">
+                        <div className="text-xs font-medium text-slate-100">
+                          Burn-in Captions (ASS Karaoke)
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          Word-by-word highlight + contextual emojis in safe
+                          zone
+                        </div>
+                      </div>
+                      <Switch
+                        checked={burnInCaptions}
+                        onCheckedChange={setBurnInCaptions}
+                      />
+                    </div>
+
+                    {/* Toggle 2: Dynamic Zoom */}
+                    <div className="flex items-center justify-between rounded-lg border border-slate-800/90 bg-slate-950/60 px-3.5 py-2.5">
+                      <div className="pr-3">
+                        <div className="text-xs font-medium text-slate-100">
+                          Dynamic Zoom (1.12x Punch-In)
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          Alternates 1.0x / 1.12x scale on sentence cut beats
+                        </div>
+                      </div>
+                      <Switch
+                        checked={dynamicZoom}
+                        onCheckedChange={setDynamicZoom}
+                      />
+                    </div>
+
+                    {/* Toggle 3: Auto Face Centering */}
+                    <div className="flex items-center justify-between rounded-lg border border-slate-800/90 bg-slate-950/60 px-3.5 py-2.5">
+                      <div className="pr-3">
+                        <div className="text-xs font-medium text-slate-100">
+                          Auto Face Centering (MediaPipe EMA)
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          Smooths horizontal speaker crop{' '}
+                          <code className="font-mono text-slate-300">
+                            x=clamp(X_face-540)
+                          </code>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={autoFaceCentering}
+                        onCheckedChange={setAutoFaceCentering}
+                      />
+                    </div>
+
+                    {/* Toggle 4: Sidechain Audio Ducking */}
+                    <div className="flex items-center justify-between rounded-lg border border-slate-800/90 bg-slate-950/60 px-3.5 py-2.5">
+                      <div className="pr-3">
+                        <div className="text-xs font-medium text-slate-100">
+                          Background Music Sidechain Ducking
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          FFmpeg{' '}
+                          <code className="font-mono text-slate-300">
+                            sidechaincompress
+                          </code>{' '}
+                          (-12dB under voice)
+                        </div>
+                      </div>
+                      <Switch
+                        checked={enableAudioDucking}
+                        onCheckedChange={setEnableAudioDucking}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {errorMessage && (
+                  <div className="p-3 rounded-lg border border-red-500/40 bg-red-500/10 text-red-200 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                    <span>{errorMessage}</span>
                   </div>
                 )}
-              </div>
-            </div>
 
-            {/* Right 5 Columns: Live Static Sample Frame Preview (Feature 5.3) */}
-            <div className="lg:col-span-5 border border-slate-800 bg-slate-950 rounded-lg p-4 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-xs text-slate-400 font-mono mb-2">
-                <span>LIVE STATIC PRESET PREVIEW</span>
-                <span>MarginV: {captionPreset === 'Minimalist Clean' ? '500px' : '520px'}</span>
-              </div>
+                {/* Primary Action Button: "Analyze & Detect Clips" with Loading Spinner */}
+                <div className="space-y-3 pt-1">
+                  <Button
+                    variant="default"
+                    size="lg"
+                    onClick={handleAnalyzeAndDetectClips}
+                    disabled={isAnalyzing}
+                    className="w-full shadow-md shadow-violet-600/20"
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Analyzing &amp; Detecting Viral Clips...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        <span>Analyze &amp; Detect Clips</span>
+                      </>
+                    )}
+                  </Button>
 
-              <div className="relative w-full h-44 rounded-lg overflow-hidden border border-slate-800 bg-gradient-to-b from-slate-900 via-[#0F172A] to-slate-950 flex flex-col items-center justify-center p-4">
-                {/* Face Tracking & Zoom Beat Indicators */}
-                <div className="absolute top-2.5 inset-x-3 flex items-center justify-between text-[11px] font-mono text-slate-400">
-                  <span>
-                    {enableFaceTracking
-                      ? 'EMA FACE LOCK: x=clamp(X_face-540)'
-                      : 'STATIC CENTER CROP'}
-                  </span>
-                  <span>
-                    {enableZoomCuts ? '1.12x ZOOM BEAT' : '1.00x STATIC'}
-                  </span>
-                </div>
-
-                {/* Contextual Emoji Preview */}
-                <div className="text-xl mb-1 select-none" aria-hidden="true">
-                  🔥 🚀
-                </div>
-
-                {/* Styled Caption Sample Frame */}
-                <div
-                  className={`px-4 py-2 rounded-lg text-center ${
-                    captionPreset === 'Minimalist Clean'
-                      ? 'bg-slate-900/90 border border-slate-800 font-sans font-bold text-base tracking-tight'
-                      : 'font-sans font-black text-lg tracking-wide'
-                  }`}
-                >
-                  <span
-                    className={
-                      captionPreset === 'Minimalist Clean'
-                        ? 'text-slate-400'
-                        : 'text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]'
+                  {/* 4-Stage Pipeline Progress Bar & Expandable Modal */}
+                  <PipelineProgressModal
+                    pipelineStep={pipelineStep}
+                    pipelinePercent={pipelinePercent}
+                    pipelineStatusText={pipelineStatusText}
+                    fileSizeBytes={videoFile?.size ?? null}
+                    fileName={
+                      videoFile?.name ||
+                      (youtubeUrl ? youtubeUrl : 'podcast_master_1080p.mp4')
                     }
-                  >
-                    RETENTION{' '}
-                  </span>
-                  <span
-                    className={`inline-block transition-transform ${
-                      enableKaraoke ? 'scale-110 mx-1' : ''
-                    } ${
-                      captionPreset === 'Hormozi Pop'
-                        ? 'text-yellow-400 drop-shadow-[0_2px_3px_rgba(0,0,0,1)]'
-                        : captionPreset === 'Cyber Neon'
-                          ? 'text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.85)]'
-                          : 'text-white'
-                    }`}
-                  >
-                    JUMPS
-                  </span>
-                  <span
-                    className={
-                      captionPreset === 'Minimalist Clean'
-                        ? 'text-slate-400'
-                        : 'text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)]'
-                    }
-                  >
-                    {' '}
-                    10X FASTER
-                  </span>
+                    errorMessage={errorMessage}
+                    onRetry={handleAnalyzeAndDetectClips}
+                    onSimulateRun={handleAnalyzeAndDetectClips}
+                  />
                 </div>
+              </CardContent>
+            </Card>
 
-                {/* Safe-Zone Margin Line */}
-                <div className="absolute bottom-3 inset-x-4 border-t border-dashed border-sky-500/40 pt-1 flex items-center justify-between text-[10px] font-mono text-sky-400/80">
-                  <span>SAFE ZONE BOUNDARY (MarginV)</span>
-                  <span>1080×1920 ASS</span>
-                </div>
-              </div>
-
-              <p className="text-[11px] text-slate-400 mt-2 font-mono">
-                Preset:{' '}
-                <strong className="text-slate-200">{captionPreset}</strong> ·{' '}
-                {enableKaraoke
-                  ? 'Active word 110% scale + \\k centisecond tags'
-                  : 'Static phrase captions'}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Stage 3: Candidate Clips & 9:16 Vertical Preview Split Workbench */}
-        <section id="candidates" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                03. Candidate Viral Clips & ±2s Cut Boundary Editor
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Strictly 30–60s standalone segments with word-level karaoke
-                offsets, automatic contextual emojis, and sentence-pause
-                alignment.
-              </p>
-            </div>
-            <span className="text-xs font-mono tabular-nums text-slate-400">
-              {clips.length} segments detected · {renderedClipIds.length}{' '}
-              exported
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left 7 Columns: Candidate Clip Cards */}
-            <div className="lg:col-span-7 space-y-4">
-              {clips.map((clip) => {
-                const isSelected = clip.clip_id === selectedClip.clip_id;
-                const isDurationValid =
-                  clip.duration_seconds >= 30 && clip.duration_seconds <= 60;
-                const hookEmojis = detectContextualEmojis(
-                  `${clip.title} ${clip.hook_transcript}`
-                );
-
-                return (
-                  <div
-                    key={clip.clip_id}
-                    onClick={() => setSelectedClipId(clip.clip_id)}
-                    className={`border rounded-xl p-5 transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'border-amber-400/70 bg-[#131C2E]'
-                        : 'border-slate-800 bg-[#111827] hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono tabular-nums text-slate-400 mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-amber-400 font-semibold">
-                          CLIP #{String(clip.clip_id).padStart(2, '0')}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span>
-                          {clip.start_time} → {clip.end_time}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span
-                          className={
-                            isDurationValid
-                              ? 'text-emerald-400'
-                              : 'text-amber-300'
-                          }
-                        >
-                          {clip.duration_seconds.toFixed(1)}s
-                        </span>
-                        {hookEmojis && (
-                          <>
-                            <span aria-hidden="true">·</span>
-                            <span>Emojis: {hookEmojis}</span>
-                          </>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-300 font-semibold">
-                          Virality Score: {clip.virality_score}/100
-                        </span>
-                        {renderedClipIds.includes(clip.clip_id) && (
-                          <>
-                            <span aria-hidden="true">·</span>
-                            <span className="text-emerald-400">Exported</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <h3 className="text-base font-semibold text-white">
-                      {clip.title}
-                    </h3>
-
-                    <div className="mt-3 space-y-2">
-                      <p className="text-xs text-slate-200 leading-relaxed">
-                        <span className="text-slate-400 font-medium">
-                          Hook (0–5s):{' '}
-                        </span>
-                        &ldquo;{clip.hook_transcript}&rdquo;
-                      </p>
-                      <p className="text-xs text-slate-400 leading-relaxed">
-                        <span className="text-slate-500 font-medium">
-                          Editorial Reasoning:{' '}
-                        </span>
-                        {clip.reasoning}
-                      </p>
-                    </div>
-
-                    {/* Interactive ±2s & ±0.5s Timestamp Tweaker Bar */}
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-4 pt-4 border-t border-slate-800/90 grid grid-cols-1 sm:grid-cols-2 gap-3"
-                    >
-                      <div className="flex items-center justify-between gap-2 bg-slate-900/90 border border-slate-800 rounded-lg px-3 py-2">
-                        <div>
-                          <span className="block text-[11px] text-slate-400">
-                            Start Cut
-                          </span>
-                          <span className="text-xs font-mono tabular-nums text-white font-semibold">
-                            {clip.start_time}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAdjustTimestamp(clip.clip_id, 'start', -2.0)
-                            }
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono tabular-nums text-slate-200 transition-colors whitespace-nowrap shrink-0"
-                          >
-                            -2s
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAdjustTimestamp(clip.clip_id, 'start', -0.5)
-                            }
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono tabular-nums text-slate-200 transition-colors whitespace-nowrap shrink-0"
-                          >
-                            -0.5s
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAdjustTimestamp(clip.clip_id, 'start', 0.5)
-                            }
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono tabular-nums text-slate-200 transition-colors whitespace-nowrap shrink-0"
-                          >
-                            +0.5s
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAdjustTimestamp(clip.clip_id, 'start', 2.0)
-                            }
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono tabular-nums text-slate-200 transition-colors whitespace-nowrap shrink-0"
-                          >
-                            +2s
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 bg-slate-900/90 border border-slate-800 rounded-lg px-3 py-2">
-                        <div>
-                          <span className="block text-[11px] text-slate-400">
-                            End Cut
-                          </span>
-                          <span className="text-xs font-mono tabular-nums text-white font-semibold">
-                            {clip.end_time}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAdjustTimestamp(clip.clip_id, 'end', -2.0)
-                            }
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono tabular-nums text-slate-200 transition-colors whitespace-nowrap shrink-0"
-                          >
-                            -2s
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAdjustTimestamp(clip.clip_id, 'end', -0.5)
-                            }
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono tabular-nums text-slate-200 transition-colors whitespace-nowrap shrink-0"
-                          >
-                            -0.5s
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAdjustTimestamp(clip.clip_id, 'end', 0.5)
-                            }
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono tabular-nums text-slate-200 transition-colors whitespace-nowrap shrink-0"
-                          >
-                            +0.5s
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAdjustTimestamp(clip.clip_id, 'end', 2.0)
-                            }
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono tabular-nums text-slate-200 transition-colors whitespace-nowrap shrink-0"
-                          >
-                            +2s
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Right 5 Columns: Live SOTA 9:16 Monitor */}
-            <div className="lg:col-span-5 lg:sticky lg:top-20">
+            {/* Live 9:16 Vertical Preview & Timeline Monitor Docked Under Control Center on Desktop */}
+            <div ref={previewSectionRef}>
               {selectedClip && (
                 <VerticalShortPlayer
                   clip={selectedClip}
                   videoFileUrl={videoFileUrl}
                   videoFileName={videoFile?.name || 'input.mp4'}
                   captionPreset={captionPreset}
-                  enableKaraoke={enableKaraoke}
-                  enableZoomCuts={enableZoomCuts}
-                  enableFaceTracking={enableFaceTracking}
+                  enableKaraoke={burnInCaptions}
+                  enableZoomCuts={dynamicZoom}
+                  enableFaceTracking={autoFaceCentering}
                   enableAudioDucking={enableAudioDucking}
                   onRenderSuccess={(id) =>
                     setRenderedClipIds((prev) =>
@@ -1276,235 +998,413 @@ export default function ClipperStudio() {
               )}
             </div>
           </div>
-        </section>
 
-        {/* SOTA Architecture Summary */}
-        <section
-          id="ffmpeg-architecture"
-          className="border border-slate-800 bg-[#111827] rounded-xl p-6 space-y-5"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-base font-semibold text-white">
-                04. SOTA Engagement Architecture & FFmpeg Filter Graph
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                How the refactored Python pipeline combines OpenCV/MediaPipe,
-                ASS Karaoke, 1.12x Zoom Cuts, and Sidechain Ducking.
-              </p>
-            </div>
-            <span className="text-xs font-mono text-amber-400">
-              pip install streamlit google-genai yt-dlp opencv-python mediapipe
-              numpy pillow
-            </span>
-          </div>
+          {/* ===============================================================
+              RIGHT PANEL (60% width -> 7 of 12 cols): Viral Clip Candidates & Timeline Preview
+             =============================================================== */}
+          <div className="lg:col-span-7 space-y-5">
+            <Card className="border-slate-800/90 bg-slate-900/55 shadow-lg shadow-cyan-950/10">
+              <CardHeader className="pb-4 border-b border-slate-800/80">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Flame className="w-4 h-4 text-cyan-400" />
+                      <CardTitle>
+                        Viral Clip Candidates &amp; Timeline Preview
+                      </CardTitle>
+                    </div>
+                    <CardDescription className="mt-1">
+                      Ordered by Gemini Virality Score (0–100). Fine-tune cut
+                      boundaries by ±2s and trigger 9:16 vertical FFmpeg
+                      renders.
+                    </CardDescription>
+                  </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-2">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                <TypeIcon className="w-4 h-4 text-amber-400" />
-                <span>1. ASS Karaoke & Emojis</span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Extracts word-level offsets and emits ASS{' '}
-                <code className="font-mono text-slate-200">\k</code> tags +
-                active word{' '}
-                <code className="font-mono text-slate-200">
-                  \fscx110\fscy110
-                </code>{' '}
-                scale bump and automatic keyword emojis (💰, 🔥, 🚀, 🧠, ⏱️).
-              </p>
-            </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        handleDownloadPythonFile(
+                          'app.py',
+                          STREAMLIT_APP_PY_CODE
+                        )
+                      }
+                    >
+                      <Download className="w-3.5 h-3.5 text-cyan-400" />
+                      Export app.py
+                    </Button>
+                  </div>
+                </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                <ZoomIn className="w-4 h-4 text-sky-400" />
-                <span>2. 1.12x Dynamic Zooms</span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Applies{' '}
-                <code className="font-mono text-slate-200">
-                  scale=iw*1.12:-1,crop=iw/1.12:ih/1.12
-                </code>{' '}
-                with{' '}
-                <code className="font-mono text-slate-200">
-                  enable=&apos;between(t,s,e)&apos;
-                </code>{' '}
-                on alternating sentence chunks to reset viewer visual fatigue.
-              </p>
-            </div>
+                {/* Source Video Visual Timeline Overview Bar */}
+                <div className="mt-4 pt-3 border-t border-slate-800/70 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 tabular-nums">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3 h-3 text-violet-400" />
+                      <span>SOURCE TIMELINE DISTRIBUTION</span>
+                    </span>
+                    <span>
+                      00:00:00 → {secondsToTimestamp(videoDurationSec)}
+                    </span>
+                  </div>
+                  <div className="relative w-full h-6 rounded-md bg-slate-950 border border-slate-800 overflow-hidden">
+                    {sortedClips.map((c) => {
+                      const sSec = timestampToSeconds(c.start_time);
+                      const eSec = timestampToSeconds(c.end_time);
+                      const total = Math.max(60, videoDurationSec);
+                      const leftPct = Math.min(
+                        94,
+                        Math.max(1, (sSec / total) * 100)
+                      );
+                      const widthPct = Math.max(
+                        3.5,
+                        Math.min(25, ((eSec - sSec) / total) * 100)
+                      );
+                      const isActive = c.clip_id === selectedClip?.clip_id;
+                      const isGreen = c.virality_score >= 90;
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                <ScanFace className="w-4 h-4 text-emerald-400" />
-                <span>3. EMA Face Auto-Reframing</span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                MediaPipe / OpenCV detects speaker $X_{'{face}'}$ and smooths{' '}
-                <code className="font-mono text-slate-200">
-                  x = clamp(X_face - 540, 0, max_x)
-                </code>{' '}
-                via Exponential Moving Average ($\alpha = 0.15$).
-              </p>
-            </div>
+                      return (
+                        <button
+                          key={c.clip_id}
+                          type="button"
+                          onClick={() => setSelectedClipId(c.clip_id)}
+                          title={`Clip #${c.clip_id}: ${c.title} (${c.virality_score}/100)`}
+                          style={{
+                            left: `${leftPct}%`,
+                            width: `${widthPct}%`,
+                          }}
+                          className={`absolute top-1 bottom-1 rounded transition-all cursor-pointer ${
+                            isActive
+                              ? 'ring-2 ring-white z-10'
+                              : 'opacity-80 hover:opacity-100'
+                          } ${
+                            isGreen
+                              ? 'bg-emerald-500/70 border border-emerald-400'
+                              : 'bg-amber-500/70 border border-amber-400'
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              </CardHeader>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                <Sliders className="w-4 h-4 text-amber-400" />
-                <span>4. Sidechain Audio Ducking</span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Ducks ambient background music whenever speech is active via{' '}
-                <code className="font-mono text-slate-200">
-                  sidechaincompress=threshold=0.08:ratio=4:attack=20:release=300
-                </code>
-                .
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Complete Refactored Python app.py Code Inspector & Downloader */}
-        <section id="python-code" className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                05. Complete Refactored Python Script (app.py — SOTA Edition)
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Includes <code className="font-mono text-slate-300">opencv-python</code>,{' '}
-                <code className="font-mono text-slate-300">mediapipe</code>,{' '}
-                <code className="font-mono text-slate-300">google-genai</code>,
-                and <code className="font-mono text-slate-300">ffmpeg</code>{' '}
-                filter graphs. Saved directly to{' '}
-                <code className="font-mono text-amber-300">/app.py</code>.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5 shrink-0">
-              <button
-                type="button"
-                onClick={handleCopyCode}
-                className="px-3.5 py-2 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-medium text-slate-200 transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0"
-              >
-                {copiedCode ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    Copied to Clipboard
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5" />
-                    Copy Code
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  handleDownloadPythonFile('app.py', STREAMLIT_APP_PY_CODE)
-                }
-                className="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Download SOTA app.py
-              </button>
-            </div>
-          </div>
-
-          <div className="border border-slate-800 bg-[#111827] rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-b border-slate-800 bg-slate-950/60 overflow-x-auto">
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setActiveCodeTab('app_py')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-mono transition-colors whitespace-nowrap shrink-0 ${
-                    activeCodeTab === 'app_py'
-                      ? 'bg-slate-800 text-amber-300 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
+              <CardContent className="pt-5">
+                {/* Tabbed List of Generated Candidate Clips Ordered by Virality Score */}
+                <Tabs
+                  value={candidateFilterTab}
+                  onValueChange={setCandidateFilterTab}
                 >
-                  app.py (Refactored SOTA Script)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveCodeTab('stage1_prompt')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-mono transition-colors whitespace-nowrap shrink-0 ${
-                    activeCodeTab === 'stage1_prompt'
-                      ? 'bg-slate-800 text-amber-300 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Feature 1: Word-Level Gemini Prompt
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveCodeTab('stage2_ffmpeg')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-mono transition-colors whitespace-nowrap shrink-0 ${
-                    activeCodeTab === 'stage2_ffmpeg'
-                      ? 'bg-slate-800 text-amber-300 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Features 2–4: FFmpeg Zoom & Sidechain CLI
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveCodeTab('requirements')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-mono transition-colors whitespace-nowrap shrink-0 ${
-                    activeCodeTab === 'requirements'
-                      ? 'bg-slate-800 text-amber-300 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  requirements.txt
-                </button>
-              </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <TabsList>
+                      <TabsTrigger value="all">
+                        All Candidates ({sortedClips.length})
+                      </TabsTrigger>
+                      <TabsTrigger value="high">
+                        High Viral &gt;90 (
+                        {
+                          sortedClips.filter((c) => c.virality_score >= 90)
+                            .length
+                        }
+                        )
+                      </TabsTrigger>
+                      <TabsTrigger value="medium">
+                        Strong 75–89 (
+                        {
+                          sortedClips.filter(
+                            (c) =>
+                              c.virality_score >= 75 && c.virality_score < 90
+                          ).length
+                        }
+                        )
+                      </TabsTrigger>
+                      <TabsTrigger value="code">
+                        <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                        Python app.py
+                      </TabsTrigger>
+                    </TabsList>
 
-              <div className="hidden md:flex items-center gap-2 text-xs font-mono text-slate-400 shrink-0">
-                <Terminal className="w-3.5 h-3.5 text-amber-400" />
-                <span>streamlit run app.py --server.maxUploadSize=2048</span>
-              </div>
-            </div>
+                    <span className="text-xs font-mono text-slate-400 tabular-nums">
+                      Sorted by Virality Score ↓
+                    </span>
+                  </div>
 
-            <pre className="p-5 text-xs font-mono text-slate-200 overflow-x-auto max-h-[640px] leading-relaxed">
-              <code>{getDisplayedCode()}</code>
-            </pre>
-          </div>
-        </section>
-      </main>
+                  {/* Candidate Clip Cards List */}
+                  {candidateFilterTab !== 'code' ? (
+                    <div className="space-y-4">
+                      {filteredClips.map((clip, rankIdx) => {
+                        const isSelected =
+                          clip.clip_id === selectedClip?.clip_id;
+                        const isGreenTier = clip.virality_score >= 90;
+                        const isRendered = renderedClipIds.includes(
+                          clip.clip_id
+                        );
+                        const isRenderingNow = renderingClipId === clip.clip_id;
+                        const emojis = detectContextualEmojis(
+                          `${clip.title} ${clip.hook_transcript}`
+                        );
 
-      <footer className="border-t border-slate-800/80 py-6 px-6 mt-12">
-        <div className="max-w-[1380px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <span>
-            ClipForge AI — SOTA Short-Form Video Clipper Engine (Hormozi ASS
-            Karaoke · 1.12x Zoom Cuts · MediaPipe EMA Face Lock · Sidechain
-            Ducking)
-          </span>
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() =>
-                handleDownloadPythonFile('app.py', STREAMLIT_APP_PY_CODE)
-              }
-              className="hover:text-slate-300 transition-colors"
-            >
-              Download app.py
-            </button>
-            <span aria-hidden="true">·</span>
-            <button
-              type="button"
-              onClick={() =>
-                handleDownloadPythonFile('requirements.txt', REQUIREMENTS_TXT)
-              }
-              className="hover:text-slate-300 transition-colors"
-            >
-              Download requirements.txt
-            </button>
+                        return (
+                          <div
+                            key={clip.clip_id}
+                            onClick={() => setSelectedClipId(clip.clip_id)}
+                            className={`rounded-xl border p-5 transition-all cursor-pointer ${
+                              isSelected
+                                ? 'border-violet-500/70 bg-slate-900/95 shadow-md shadow-violet-950/20'
+                                : 'border-slate-800/90 bg-slate-950/60 hover:border-slate-700'
+                            }`}
+                          >
+                            {/* Top Row: Clip Title + Virality Score Badge (Green >90, Yellow 75-89) */}
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 text-xs font-mono text-slate-400 tabular-nums">
+                                  <span className="text-cyan-400 font-semibold">
+                                    RANK #{rankIdx + 1}
+                                  </span>
+                                  <span aria-hidden="true">·</span>
+                                  <span>
+                                    {clip.start_time} → {clip.end_time}
+                                  </span>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="text-slate-200 font-semibold">
+                                    {clip.duration_seconds.toFixed(1)}s
+                                  </span>
+                                  {emojis && (
+                                    <>
+                                      <span aria-hidden="true">·</span>
+                                      <span>{emojis}</span>
+                                    </>
+                                  )}
+                                </div>
+                                <h4 className="text-base font-semibold text-white leading-snug">
+                                  {clip.title}
+                                </h4>
+                              </div>
+
+                              {/* Virality Score Badge (Green >90, Yellow 75–89) */}
+                              <Badge
+                                variant={isGreenTier ? 'green' : 'yellow'}
+                                className="text-xs px-3 py-1"
+                              >
+                                <Flame className="w-3.5 h-3.5" />
+                                <span>
+                                  Virality {clip.virality_score}/100
+                                </span>
+                              </Badge>
+                            </div>
+
+                            {/* 0-5s Hook Text Box */}
+                            <div className="mt-3.5 rounded-lg border border-slate-800/80 bg-slate-900/70 p-3 space-y-1.5">
+                              <div className="flex items-center justify-between text-[11px] font-mono text-violet-300">
+                                <span>0–5s SPOKEN HOOK TRANSCRIPT</span>
+                                <span>
+                                  {burnInCaptions
+                                    ? `Preset: ${captionPreset}`
+                                    : 'Captions Off'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-100 font-medium leading-relaxed">
+                                &ldquo;{clip.hook_transcript}&rdquo;
+                              </p>
+                              <p className="text-[11px] text-slate-400 leading-relaxed pt-0.5">
+                                <strong className="text-slate-300 font-medium">
+                                  Why it hits:{' '}
+                                </strong>
+                                {clip.reasoning}
+                              </p>
+                            </div>
+
+                            {/* Bottom Controls: Inline Timestamp Adjustment Buttons (±2s Start/End) + "Render 9:16 Short" Button */}
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-4 pt-3.5 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* Start ±2s Controls */}
+                                <div className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1">
+                                  <span className="text-[11px] font-mono text-slate-400 px-1">
+                                    Start:
+                                  </span>
+                                  <span className="text-xs font-mono tabular-nums text-white font-semibold pr-1">
+                                    {clip.start_time}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleAdjustTimestamp(
+                                        clip.clip_id,
+                                        'start',
+                                        -2.0
+                                      )
+                                    }
+                                    className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-mono tabular-nums text-slate-200 transition-colors cursor-pointer"
+                                  >
+                                    -2s Start
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleAdjustTimestamp(
+                                        clip.clip_id,
+                                        'start',
+                                        2.0
+                                      )
+                                    }
+                                    className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-mono tabular-nums text-slate-200 transition-colors cursor-pointer"
+                                  >
+                                    +2s Start
+                                  </button>
+                                </div>
+
+                                {/* End ±2s Controls */}
+                                <div className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1">
+                                  <span className="text-[11px] font-mono text-slate-400 px-1">
+                                    End:
+                                  </span>
+                                  <span className="text-xs font-mono tabular-nums text-white font-semibold pr-1">
+                                    {clip.end_time}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleAdjustTimestamp(
+                                        clip.clip_id,
+                                        'end',
+                                        -2.0
+                                      )
+                                    }
+                                    className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-mono tabular-nums text-slate-200 transition-colors cursor-pointer"
+                                  >
+                                    -2s End
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleAdjustTimestamp(
+                                        clip.clip_id,
+                                        'end',
+                                        2.0
+                                      )
+                                    }
+                                    className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-mono tabular-nums text-slate-200 transition-colors cursor-pointer"
+                                  >
+                                    +2s End
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* "Render 9:16 Short" Action Button per Card */}
+                              <Button
+                                variant={isRendered ? 'emerald' : 'default'}
+                                size="default"
+                                onClick={() => handleTriggerCardRender(clip)}
+                              >
+                                {isRenderingNow ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Rendering 9:16...</span>
+                                  </>
+                                ) : isRendered ? (
+                                  <>
+                                    <Play className="w-3.5 h-3.5" />
+                                    <span>Previewing 9:16 Short</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Film className="w-3.5 h-3.5" />
+                                    <span>Render 9:16 Short</span>
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* Python app.py & FFmpeg SOTA Code Inspector Tab */
+                    <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
+                      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-800 bg-slate-900/70">
+                        <div className="flex items-center gap-1 overflow-x-auto">
+                          <button
+                            type="button"
+                            onClick={() => setActiveCodeTab('app_py')}
+                            className={`px-2.5 py-1 rounded text-xs font-mono cursor-pointer ${
+                              activeCodeTab === 'app_py'
+                                ? 'bg-violet-500/20 text-violet-200 border border-violet-500/40'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            app.py (Complete SOTA Script)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveCodeTab('stage1_prompt')}
+                            className={`px-2.5 py-1 rounded text-xs font-mono cursor-pointer ${
+                              activeCodeTab === 'stage1_prompt'
+                                ? 'bg-violet-500/20 text-violet-200 border border-violet-500/40'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            Gemini Prompt
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveCodeTab('stage2_ffmpeg')}
+                            className={`px-2.5 py-1 rounded text-xs font-mono cursor-pointer ${
+                              activeCodeTab === 'stage2_ffmpeg'
+                                ? 'bg-violet-500/20 text-violet-200 border border-violet-500/40'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            FFmpeg SOTA Filter
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveCodeTab('requirements')}
+                            className={`px-2.5 py-1 rounded text-xs font-mono cursor-pointer ${
+                              activeCodeTab === 'requirements'
+                                ? 'bg-violet-500/20 text-violet-200 border border-violet-500/40'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            requirements.txt
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCopyCode}
+                          >
+                            {copiedCode ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                Copy Code
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <pre className="p-4 text-xs font-mono text-slate-200 overflow-x-auto max-h-[640px] leading-relaxed">
+                        <code>{getDisplayedCode()}</code>
+                      </pre>
+                    </div>
+                  )}
+                </Tabs>
+              </CardContent>
+            </Card>
           </div>
         </div>
-      </footer>
+      </main>
     </div>
   );
 }

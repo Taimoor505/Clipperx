@@ -11,6 +11,12 @@ const ai = new GoogleGenAI({
   },
 });
 
+export async function GET() {
+  return NextResponse.json({
+    apiKeyConfigured: Boolean(process.env.GEMINI_API_KEY),
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.GEMINI_API_KEY) {
@@ -29,6 +35,7 @@ export async function POST(req: NextRequest) {
       videoDurationSeconds = 2400,
       youtubeUrl = '',
       transcriptContext = '',
+      selectedModel = 'gemini-2.5-flash',
       frames = [],
     } = body;
 
@@ -54,12 +61,14 @@ export async function POST(req: NextRequest) {
 
 SOURCE VIDEO METADATA:
 - Title / File: ${videoTitle}
+- Requested Analysis Profile: ${selectedModel}
 - Total Duration: ${videoDurationSeconds} seconds (${Math.floor(videoDurationSeconds / 60)}m ${Math.round(videoDurationSeconds % 60)}s)
 ${youtubeUrl ? `- YouTube URL: ${youtubeUrl}` : ''}
 ${transcriptContext ? `- Audio/Transcript Context:\n${transcriptContext}` : ''}
 
 IMPORTANT TIMING & KARAOKE CONSTRAINT:
 - Ensure all "start_time" and "end_time" values fall within the source duration (00:00:00.000 to ${formatTimestamp(videoDurationSeconds)}).
+- Order clips from highest to lowest "virality_score" (include a mix of 90+ and 78-89 scores).
 - For every item in "transcript_lines", include a "words" array with word-by-word timing offsets ("word", "start_time", "end_time" in seconds from the start of the clip) so the ASS Karaoke engine can highlight each spoken word.`;
 
     parts.push({ text: contextualPrompt });
@@ -69,13 +78,13 @@ IMPORTANT TIMING & KARAOKE CONSTRAINT:
       contents: { parts },
       config: {
         systemInstruction:
-          'You are an expert AI Short-Form Video Editor. Analyze multimodal video frames and audio transcripts to detect high-retention 30-60 second vertical clip segments with strong 0-5s hooks, sentence cut boundaries, and word-level karaoke timing.',
+          'You are an expert AI Short-Form Video Editor for ClipperX AI. Analyze multimodal video frames and audio transcripts to detect high-retention 30-60 second vertical clip segments with strong 0-5s hooks, sentence cut boundaries, and word-level karaoke timing.',
         temperature: 0.25,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.ARRAY,
           description:
-            'List of 3 to 6 high-engagement standalone short-form video clip candidates with word-level timing.',
+            'List of 4 to 6 high-engagement standalone short-form video clip candidates with word-level timing.',
           items: {
             type: Type.OBJECT,
             properties: {
@@ -167,7 +176,12 @@ IMPORTANT TIMING & KARAOKE CONSTRAINT:
     });
 
     const rawText = response.text?.trim() || '[]';
-    const clips = JSON.parse(rawText);
+    const parsed = JSON.parse(rawText);
+    const clips = Array.isArray(parsed)
+      ? [...parsed].sort(
+          (a, b) => (b.virality_score ?? 0) - (a.virality_score ?? 0)
+        )
+      : [];
 
     return NextResponse.json({ clips });
   } catch (error: unknown) {
