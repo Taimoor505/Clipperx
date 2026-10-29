@@ -1,0 +1,6 @@
+{
+  "name": "ClipForge AI — Short-Form Video Clipper Engine",
+  "description": "Multimodal AI video analysis and 9:16 vertical Shorts rendering pipeline powered by Gemini and FFmpeg, complete with interactive studio and runnable Streamlit app.py script.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
