@@ -21,13 +21,18 @@ import {
   Flame,
   Clock,
   Wand2,
+  BarChart3,
 } from 'lucide-react';
 import VerticalShortPlayer, {
   ViralClipSegment,
+  TranscriptLine,
   CaptionPresetName,
   timestampToSeconds,
 } from './VerticalShortPlayer';
 import PipelineProgressModal from './PipelineProgressModal';
+import TranscriptEditor from './TranscriptEditor';
+import CaptionStylePicker from './CaptionStylePicker';
+import ViralityInsightsModal from './ViralityInsightsModal';
 import {
   STREAMLIT_APP_PY_CODE,
   REQUIREMENTS_TXT,
@@ -284,6 +289,9 @@ export default function ClipperStudio() {
   const [candidateFilterTab, setCandidateFilterTab] = useState<string>('all');
   const [renderedClipIds, setRenderedClipIds] = useState<number[]>([]);
   const [renderingClipId, setRenderingClipId] = useState<number | null>(null);
+  const [insightsModalClipId, setInsightsModalClipId] = useState<number | null>(
+    null
+  );
 
   // Code Modal / Tab state
   const [activeCodeTab, setActiveCodeTab] = useState<
@@ -552,6 +560,23 @@ export default function ClipperStudio() {
     setPipelineStatusText('New project initialized — upload video or paste URL');
     setClips(INITIAL_DEMO_CLIPS);
     setSelectedClipId(1);
+  };
+
+  const handleUpdateClipTranscript = (
+    clipId: number,
+    updatedLines: TranscriptLine[]
+  ) => {
+    setClips((prev) =>
+      prev.map((c) => {
+        if (c.clip_id !== clipId) return c;
+        const firstLineText = updatedLines[0]?.text || c.hook_transcript;
+        return {
+          ...c,
+          hook_transcript: firstLineText,
+          transcript_lines: updatedLines,
+        };
+      })
+    );
   };
 
   const handleDownloadPythonFile = (filename: string, content: string) => {
@@ -848,10 +873,13 @@ export default function ClipperStudio() {
                       className="h-7 px-2 rounded-md bg-slate-950 border border-slate-800 text-[11px] font-medium text-cyan-300 focus:outline-none focus:border-violet-500 cursor-pointer"
                     >
                       <option value="Hormozi Pop">Preset: Hormozi Pop</option>
-                      <option value="Minimalist Clean">
-                        Preset: Minimalist Clean
+                      <option value="Clean Minimalist">
+                        Preset: Clean Minimalist
                       </option>
                       <option value="Cyber Neon">Preset: Cyber Neon</option>
+                      <option value="Red Highlight">
+                        Preset: Red Highlight
+                      </option>
                     </select>
                   </div>
 
@@ -1025,6 +1053,16 @@ export default function ClipperStudio() {
                       variant="outline"
                       size="sm"
                       onClick={() =>
+                        setInsightsModalClipId(selectedClip?.clip_id ?? 1)
+                      }
+                    >
+                      <BarChart3 className="w-3.5 h-3.5 text-violet-400" />
+                      Virality Insights
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
                         handleDownloadPythonFile(
                           'app.py',
                           STREAMLIT_APP_PY_CODE
@@ -1182,16 +1220,36 @@ export default function ClipperStudio() {
                                 </h4>
                               </div>
 
-                              {/* Virality Score Badge (Green >90, Yellow 75–89) */}
-                              <Badge
-                                variant={isGreenTier ? 'green' : 'yellow'}
-                                className="text-xs px-3 py-1"
-                              >
-                                <Flame className="w-3.5 h-3.5" />
-                                <span>
-                                  Virality {clip.virality_score}/100
-                                </span>
-                              </Badge>
+                              {/* Virality Score Badge + Insights Trigger (Green >90, Yellow 75–89) */}
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedClipId(clip.clip_id);
+                                    setInsightsModalClipId(clip.clip_id);
+                                  }}
+                                  title="Open Virality Insights & Multimodal Breakdown"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20 text-[11px] font-mono text-violet-200 transition-colors cursor-pointer"
+                                >
+                                  <BarChart3 className="w-3 h-3 text-cyan-400" />
+                                  <span>Why {clip.virality_score}?</span>
+                                </button>
+                                <Badge
+                                  variant={isGreenTier ? 'green' : 'yellow'}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedClipId(clip.clip_id);
+                                    setInsightsModalClipId(clip.clip_id);
+                                  }}
+                                  className="text-xs px-3 py-1 cursor-pointer hover:opacity-90"
+                                >
+                                  <Flame className="w-3.5 h-3.5" />
+                                  <span>
+                                    Virality {clip.virality_score}/100
+                                  </span>
+                                </Badge>
+                              </div>
                             </div>
 
                             {/* 0-5s Hook Text Box */}
@@ -1402,9 +1460,45 @@ export default function ClipperStudio() {
                 </Tabs>
               </CardContent>
             </Card>
+
+            {/* Interactive Word-Level Transcript & Sentence Cut Boundary Editor */}
+            {selectedClip && (
+              <TranscriptEditor
+                clipId={selectedClip.clip_id}
+                clipTitle={selectedClip.title}
+                clipDuration={selectedClip.duration_seconds}
+                transcriptLines={selectedClip.transcript_lines}
+                onChangeTranscript={(updatedLines) =>
+                  handleUpdateClipTranscript(selectedClip.clip_id, updatedLines)
+                }
+              />
+            )}
+
+            {/* Real-Time Subtitle & Caption Customizer */}
+            <CaptionStylePicker
+              selectedPreset={captionPreset}
+              onSelectPreset={(presetId) => setCaptionPreset(presetId)}
+              sampleHookText={
+                selectedClip?.transcript_lines?.[0]?.text ||
+                selectedClip?.hook_transcript ||
+                'Stop cutting viral video on fixed time intervals 🔥'
+              }
+            />
           </div>
         </div>
       </main>
+
+      {/* Data-Dense Virality Insights Modal */}
+      <ViralityInsightsModal
+        clip={
+          clips.find((c) => c.clip_id === insightsModalClipId) || selectedClip
+        }
+        isOpen={insightsModalClipId !== null}
+        onClose={() => setInsightsModalClipId(null)}
+        onSelectClipForRender={(clipToRender) =>
+          handleTriggerCardRender(clipToRender)
+        }
+      />
     </div>
   );
 }

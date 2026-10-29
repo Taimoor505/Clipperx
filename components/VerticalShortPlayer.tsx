@@ -25,7 +25,9 @@ import { detectContextualEmojis } from '@/lib/python-script';
 export type CaptionPresetName =
   | 'Hormozi Pop'
   | 'Minimalist Clean'
-  | 'Cyber Neon';
+  | 'Clean Minimalist'
+  | 'Cyber Neon'
+  | 'Red Highlight';
 
 export interface WordTiming {
   word: string;
@@ -206,7 +208,17 @@ export function generateKaraokeAssFileContent(
       marginV: 520,
     },
     'Minimalist Clean': {
-      font: 'Montserrat',
+      font: 'Inter',
+      size: 58,
+      primary: '&H00FFFFFF',
+      secondary: '&H00B4B4B4',
+      outline: '&H60181818',
+      borderStyle: 3,
+      outlineW: 14,
+      marginV: 500,
+    },
+    'Clean Minimalist': {
+      font: 'Inter',
       size: 58,
       primary: '&H00FFFFFF',
       secondary: '&H00B4B4B4',
@@ -225,9 +237,19 @@ export function generateKaraokeAssFileContent(
       outlineW: 6,
       marginV: 520,
     },
+    'Red Highlight': {
+      font: 'Montserrat',
+      size: 68,
+      primary: '&H000000FF',
+      secondary: '&H00FFFFFF',
+      outline: '&H00000000',
+      borderStyle: 1,
+      outlineW: 5,
+      marginV: 500,
+    },
   };
 
-  const p = presetMap[presetName];
+  const p = presetMap[presetName] || presetMap['Hormozi Pop'];
   const header = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -632,18 +654,25 @@ export default function VerticalShortPlayer({
           ctx.fillText(emojis, safeCenterX, safeZoneY - 54);
         }
 
-        const isMinimalist = captionPreset === 'Minimalist Clean';
+        const isMinimalist =
+          captionPreset === 'Minimalist Clean' ||
+          captionPreset === 'Clean Minimalist';
         const isCyber = captionPreset === 'Cyber Neon';
+        const isRed = captionPreset === 'Red Highlight';
 
         const activeColor = isMinimalist
           ? '#FFFFFF'
           : isCyber
-            ? '#22D3EE'
-            : '#FACC15';
+            ? '#00FFFF'
+            : isRed
+              ? '#FF0000'
+              : '#FFFF00';
         const inactiveColor = isMinimalist ? '#94A3B8' : '#FFFFFF';
         const fontFamily = isMinimalist
-          ? '"Plus Jakarta Sans", sans-serif'
-          : 'Impact, "Plus Jakarta Sans", sans-serif';
+          ? '"Inter", "Plus Jakarta Sans", sans-serif'
+          : isRed
+            ? '"Montserrat", "Plus Jakarta Sans", sans-serif'
+            : 'Impact, "Plus Jakarta Sans", sans-serif';
 
         const mid = Math.ceil(words.length / 2);
         const rows = [words.slice(0, mid), words.slice(mid)].filter(
