@@ -22,6 +22,7 @@ import {
   Clock,
   Wand2,
   BarChart3,
+  Share2,
 } from 'lucide-react';
 import VerticalShortPlayer, {
   ViralClipSegment,
@@ -33,6 +34,9 @@ import PipelineProgressModal from './PipelineProgressModal';
 import TranscriptEditor from './TranscriptEditor';
 import CaptionStylePicker from './CaptionStylePicker';
 import ViralityInsightsModal from './ViralityInsightsModal';
+import BatchExportDrawer from './BatchExportDrawer';
+import SocialPublishModal from './SocialPublishModal';
+import AudioStudioDrawer from './AudioStudioDrawer';
 import {
   STREAMLIT_APP_PY_CODE,
   REQUIREMENTS_TXT,
@@ -292,6 +296,28 @@ export default function ClipperStudio() {
   const [insightsModalClipId, setInsightsModalClipId] = useState<number | null>(
     null
   );
+  const [socialPublishClipId, setSocialPublishClipId] = useState<number | null>(
+    null
+  );
+  const [batchSelectedClipIds, setBatchSelectedClipIds] = useState<number[]>([
+    1, 2,
+  ]);
+
+  const handleToggleBatchSelectClip = (clipId: number) => {
+    setBatchSelectedClipIds((prev) =>
+      prev.includes(clipId)
+        ? prev.filter((id) => id !== clipId)
+        : [...prev, clipId]
+    );
+  };
+
+  const handleSelectAllBatchClips = () => {
+    setBatchSelectedClipIds(clips.map((c) => c.clip_id));
+  };
+
+  const handleDeselectAllBatchClips = () => {
+    setBatchSelectedClipIds([]);
+  };
 
   // Code Modal / Tab state
   const [activeCodeTab, setActiveCodeTab] = useState<
@@ -1048,7 +1074,17 @@ export default function ClipperStudio() {
                     </CardDescription>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setSocialPublishClipId(selectedClip?.clip_id ?? 1)
+                      }
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-cyan-400" />
+                      Social Publish
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -1163,9 +1199,25 @@ export default function ClipperStudio() {
                       </TabsTrigger>
                     </TabsList>
 
-                    <span className="text-xs font-mono text-slate-400 tabular-nums">
-                      Sorted by Virality Score ↓
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={
+                          batchSelectedClipIds.length === clips.length
+                            ? handleDeselectAllBatchClips
+                            : handleSelectAllBatchClips
+                        }
+                        className="text-xs font-mono text-cyan-400 hover:text-cyan-300 cursor-pointer"
+                      >
+                        {batchSelectedClipIds.length === clips.length
+                          ? 'Deselect All'
+                          : `Select All (${clips.length})`}
+                      </button>
+                      <span className="text-slate-700">|</span>
+                      <span className="text-xs font-mono text-slate-400 tabular-nums">
+                        Sorted by Virality Score ↓
+                      </span>
+                    </div>
                   </div>
 
                   {/* Candidate Clip Cards List */}
@@ -1183,6 +1235,10 @@ export default function ClipperStudio() {
                           `${clip.title} ${clip.hook_transcript}`
                         );
 
+                        const isBatchChecked = batchSelectedClipIds.includes(
+                          clip.clip_id
+                        );
+
                         return (
                           <div
                             key={clip.clip_id}
@@ -1193,31 +1249,49 @@ export default function ClipperStudio() {
                                 : 'border-slate-800/90 bg-slate-950/60 hover:border-slate-700'
                             }`}
                           >
-                            {/* Top Row: Clip Title + Virality Score Badge (Green >90, Yellow 75-89) */}
+                            {/* Top Row: Multi-Select Checkbox + Clip Title + Virality Score Badge (Green >90, Yellow 75-89) */}
                             <div className="flex items-start justify-between gap-4">
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2 text-xs font-mono text-slate-400 tabular-nums">
-                                  <span className="text-cyan-400 font-semibold">
-                                    RANK #{rankIdx + 1}
-                                  </span>
-                                  <span aria-hidden="true">·</span>
-                                  <span>
-                                    {clip.start_time} → {clip.end_time}
-                                  </span>
-                                  <span aria-hidden="true">·</span>
-                                  <span className="text-slate-200 font-semibold">
-                                    {clip.duration_seconds.toFixed(1)}s
-                                  </span>
-                                  {emojis && (
-                                    <>
-                                      <span aria-hidden="true">·</span>
-                                      <span>{emojis}</span>
-                                    </>
-                                  )}
+                              <div className="flex items-start gap-3">
+                                <label
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={`Select Clip #${clip.clip_id} for batch export`}
+                                  className="mt-0.5 flex items-center cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`Select Clip #${clip.clip_id} for batch export`}
+                                    checked={isBatchChecked}
+                                    onChange={() =>
+                                      handleToggleBatchSelectClip(clip.clip_id)
+                                    }
+                                    className="w-4 h-4 rounded border-slate-700 bg-slate-900 accent-cyan-400 cursor-pointer"
+                                  />
+                                </label>
+
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 text-xs font-mono text-slate-400 tabular-nums">
+                                    <span className="text-cyan-400 font-semibold">
+                                      RANK #{rankIdx + 1}
+                                    </span>
+                                    <span aria-hidden="true">·</span>
+                                    <span>
+                                      {clip.start_time} → {clip.end_time}
+                                    </span>
+                                    <span aria-hidden="true">·</span>
+                                    <span className="text-slate-200 font-semibold">
+                                      {clip.duration_seconds.toFixed(1)}s
+                                    </span>
+                                    {emojis && (
+                                      <>
+                                        <span aria-hidden="true">·</span>
+                                        <span>{emojis}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  <h4 className="text-base font-semibold text-white leading-snug">
+                                    {clip.title}
+                                  </h4>
                                 </div>
-                                <h4 className="text-base font-semibold text-white leading-snug">
-                                  {clip.title}
-                                </h4>
                               </div>
 
                               {/* Virality Score Badge + Insights Trigger (Green >90, Yellow 75–89) */}
@@ -1352,29 +1426,44 @@ export default function ClipperStudio() {
                                 </div>
                               </div>
 
-                              {/* "Render 9:16 Short" Action Button per Card */}
-                              <Button
-                                variant={isRendered ? 'emerald' : 'default'}
-                                size="default"
-                                onClick={() => handleTriggerCardRender(clip)}
-                              >
-                                {isRenderingNow ? (
-                                  <>
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    <span>Rendering 9:16...</span>
-                                  </>
-                                ) : isRendered ? (
-                                  <>
-                                    <Play className="w-3.5 h-3.5" />
-                                    <span>Previewing 9:16 Short</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Film className="w-3.5 h-3.5" />
-                                    <span>Render 9:16 Short</span>
-                                  </>
-                                )}
-                              </Button>
+                              {/* "Publish Short" + "Render 9:16 Short" Action Buttons per Card */}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="default"
+                                  onClick={() => {
+                                    setSelectedClipId(clip.clip_id);
+                                    setSocialPublishClipId(clip.clip_id);
+                                  }}
+                                >
+                                  <Share2 className="w-3.5 h-3.5 text-cyan-400" />
+                                  <span>Publish Short</span>
+                                </Button>
+
+                                <Button
+                                  variant={isRendered ? 'emerald' : 'default'}
+                                  size="default"
+                                  onClick={() => handleTriggerCardRender(clip)}
+                                >
+                                  {isRenderingNow ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      <span>Rendering 9:16...</span>
+                                    </>
+                                  ) : isRendered ? (
+                                    <>
+                                      <Play className="w-3.5 h-3.5" />
+                                      <span>Previewing 9:16 Short</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Film className="w-3.5 h-3.5" />
+                                      <span>Render 9:16 Short</span>
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -1484,6 +1573,12 @@ export default function ClipperStudio() {
                 'Stop cutting viral video on fixed time intervals 🔥'
               }
             />
+
+            {/* Audio Enhancement & Sidechain Ducking Studio Drawer */}
+            <AudioStudioDrawer
+              enableAudioDucking={enableAudioDucking}
+              onToggleAudioDucking={(enabled) => setEnableAudioDucking(enabled)}
+            />
           </div>
         </div>
       </main>
@@ -1497,6 +1592,32 @@ export default function ClipperStudio() {
         onClose={() => setInsightsModalClipId(null)}
         onSelectClipForRender={(clipToRender) =>
           handleTriggerCardRender(clipToRender)
+        }
+      />
+
+      {/* Direct-to-Social Publishing Modal (TikTok, YouTube Shorts, Instagram Reels) */}
+      <SocialPublishModal
+        clip={
+          clips.find((c) => c.clip_id === socialPublishClipId) || selectedClip
+        }
+        isOpen={socialPublishClipId !== null}
+        onClose={() => setSocialPublishClipId(null)}
+      />
+
+      {/* Floating Batch Action & Export Queue Drawer */}
+      <div className="h-20" aria-hidden="true" />
+      <BatchExportDrawer
+        clips={sortedClips}
+        selectedClipIds={batchSelectedClipIds}
+        onToggleSelectClip={handleToggleBatchSelectClip}
+        onSelectAllClips={handleSelectAllBatchClips}
+        onDeselectAll={handleDeselectAllBatchClips}
+        captionPreset={captionPreset}
+        enableKaraoke={burnInCaptions}
+        onClipRenderComplete={(completedId) =>
+          setRenderedClipIds((prev) =>
+            prev.includes(completedId) ? prev : [...prev, completedId]
+          )
         }
       />
     </div>
