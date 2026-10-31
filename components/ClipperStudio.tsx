@@ -174,6 +174,80 @@ const INITIAL_DEMO_CLIPS: ViralClipSegment[] = [
   },
 ];
 
+// FastAPI + FFmpeg worker (apps/api). When unset, the app falls back to the
+// metadata-only /api/analyze route and in-browser canvas export.
+const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
+
+// Clip pickers for the transcript engine (ids from https://openrouter.ai/models)
+const OPENROUTER_MODELS = [
+  { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash (cheapest)' },
+  { id: 'anthropic/claude-haiku-5.5', label: 'Claude Haiku 5.5' },
+  { id: 'anthropic/claude-sonnet-5.5', label: 'Claude Sonnet 5.5 (best picks)' },
+  { id: 'openai/gpt-5.6-luna', label: 'GPT-5.6 Luna' },
+  { id: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B (free, rate-limited)' },
+];
+
+async function readErrorDetail(response: Response): Promise<string> {
+  try {
+    const data = await response.json();
+    return data.detail || data.error || `Request failed (${response.status})`;
+  } catch {
+    return `Request failed (${response.status})`;
+  }
+}
+
+const YOUTUBE_LINK = /^https:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//;
+
+function formatBytes(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)} GB`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`;
+  return `${Math.round(n / 1e3)} KB`;
+}
+
+/**
+ * Downloads a link on the backend (vidgrab: any site, parallel connections) and returns the
+ * stored video_id. `onProgress` gets a 0-1 fraction (null while the size is unknown) and a label.
+ */
+async function downloadFromLink(
+  url: string,
+  onProgress: (fraction: number | null, label: string) => void
+): Promise<string> {
+  const start = await fetch(`${BACKEND_URL}/api/downloads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (!start.ok) throw new Error(await readErrorDetail(start));
+  const { id } = await start.json();
+
+  for (;;) {
+    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    const res = await fetch(`${BACKEND_URL}/api/downloads/${id}`);
+    if (!res.ok) throw new Error(await readErrorDetail(res));
+    const job = await res.json();
+    if (job.status === 'done') break;
+    if (job.status === 'error' || job.status === 'canceled') {
+      throw new Error(job.error || 'The download failed.');
+    }
+    if (job.phase === 'merging') {
+      onProgress(1, 'Merging video and audio...');
+    } else if (job.phase === 'downloading') {
+      const fraction = job.total ? Math.min(1, job.downloaded / job.total) : null;
+      const speed = job.speed ? ` · ${formatBytes(job.speed)}/s` : '';
+      const amount = job.total
+        ? `${Math.round((fraction ?? 0) * 100)}% of ${formatBytes(job.total)}`
+        : formatBytes(job.downloaded);
+      onProgress(fraction, `Downloading video: ${amount}${speed}`);
+    } else {
+      onProgress(null, 'Finding the video...');
+    }
+  }
+
+  const imported = await fetch(`${BACKEND_URL}/api/downloads/${id}/import`, { method: 'POST' });
+  if (!imported.ok) throw new Error(await readErrorDetail(imported));
+  return (await imported.json()).video_id;
+}
+
 function secondsToTimestamp(sec: number): string {
   const safe = Math.max(0, sec);
   const hrs = Math.floor(safe / 3600);
@@ -192,6 +266,7 @@ function secondsToTimestamp(sec: number): string {
 interface MinimalVerticalClipCardProps {
   clip: ViralClipSegment;
   videoFileUrl: string | null;
+  sourceVideoId: string | null;
   captionPreset: CaptionPresetName;
   burnInCaptions: boolean;
   dynamicZoom: boolean;
@@ -205,6 +280,7 @@ interface MinimalVerticalClipCardProps {
 function MinimalVerticalClipCard({
   clip,
   videoFileUrl,
+  sourceVideoId,
   captionPreset,
   burnInCaptions,
   dynamicZoom,
@@ -477,6 +553,50 @@ function MinimalVerticalClipCard({
     e.stopPropagation();
     if (isDownloading) return;
     setIsDownloading(true);
+
+    // Real FFmpeg render on the backend worker
+    if (BACKEND_URL && sourceVideoId) {
+      const form = new FormData();
+      form.append('video_id', sourceVideoId);
+      form.append('start_time', clip.start_time);
+      form.append('end_time', clip.end_time);
+      form.append('burn_captions', String(burnInCaptions));
+      form.append('dynamic_zoom', String(dynamicZoom));
+      form.append('caption_preset', captionPreset);
+      form.append('transcript_json', JSON.stringify(clip.transcript_lines ?? []));
+      fetch(`${BACKEND_URL}/api/render`, { method: 'POST', body: form })
+        .then(async (response) => {
+          if (!response.ok) throw new Error(await readErrorDetail(response));
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `clipperx_short_${clip.clip_id}_1080x1920.mp4`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+          setDownloadedDone(true);
+          window.setTimeout(() => setDownloadedDone(false), 2500);
+        })
+        .catch((err: unknown) => {
+          window.alert(
+            `Render failed: ${err instanceof Error ? err.message : String(err)}`
+          );
+        })
+        .finally(() => setIsDownloading(false));
+      return;
+    }
+
+    if (BACKEND_URL) {
+      window.alert(
+        'These clips came from a link, so there is no video file to cut. ' +
+          'Upload the video file to render MP4s.'
+      );
+      setIsDownloading(false);
+      return;
+    }
+
     handleStartPlay();
 
     const canvas = canvasRef.current;
@@ -722,6 +842,13 @@ export default function ClipperStudio() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoFileUrl, setVideoFileUrl] = useState<string | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState<string>('');
+  const [sourceVideoId, setSourceVideoId] = useState<string | null>(null);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
+  const [maxClips, setMaxClips] = useState<number>(10);
+  const [analysisEngine, setAnalysisEngine] = useState<'transcript' | 'gemini'>(
+    'transcript'
+  );
+  const [llmModel, setLlmModel] = useState<string>(OPENROUTER_MODELS[0].id);
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
   // Processing Progress State (Step 2)
@@ -732,8 +859,8 @@ export default function ClipperStudio() {
 
   // Advanced Settings (Hidden inside top-right gear icon)
   const [selectedModel, setSelectedModel] = useState<
-    'gemini-2.5-flash' | 'gemini-2.5-pro'
-  >('gemini-2.5-flash');
+    'gemini-flash-latest' | 'gemini-pro-latest'
+  >('gemini-flash-latest');
   const [burnInCaptions, setBurnInCaptions] = useState<boolean>(true);
   const [dynamicZoom, setDynamicZoom] = useState<boolean>(true);
   const [autoFaceCentering, setAutoFaceCentering] = useState<boolean>(true);
@@ -766,6 +893,112 @@ export default function ClipperStudio() {
     setStep('processing');
     setProgressPct(12);
     setProgressStageLabel('Analyzing viral hooks...');
+    setPipelineError(null);
+
+    const linkUrl = importTab === 'link' ? youtubeUrl.trim() : '';
+    if (BACKEND_URL && (linkUrl || targetFile)) {
+      const useTranscript = analysisEngine === 'transcript';
+      setSourceVideoId(null);
+
+      // Links are downloaded on the backend first (0-30% of the bar), then analyzed by id
+      let downloadedId: string | null = null;
+      let geminiReadsLink = false;
+      if (linkUrl) {
+        setProgressPct(2);
+        setProgressStageLabel('Finding the video...');
+        try {
+          downloadedId = await downloadFromLink(linkUrl, (fraction, label) => {
+            setProgressStageLabel(label);
+            if (fraction !== null) setProgressPct(2 + Math.round(fraction * 28));
+          });
+        } catch (err: unknown) {
+          if (!useTranscript && YOUTUBE_LINK.test(linkUrl)) {
+            geminiReadsLink = true; // Gemini can still watch public YouTube links itself
+          } else {
+            setPipelineError(err instanceof Error ? err.message : String(err));
+            setProgressPct(0);
+            setStep('import');
+            return;
+          }
+        }
+        setProgressPct(30);
+      }
+
+      setProgressStageLabel(
+        geminiReadsLink
+          ? 'Sending link to Gemini...'
+          : downloadedId
+            ? useTranscript
+              ? 'Transcribing audio with Whisper...'
+              : 'Uploading video to Gemini...'
+            : useTranscript
+              ? 'Uploading video...'
+              : 'Uploading video to Gemini...'
+      );
+      // Real analysis takes a while; creep toward 92% until the backend answers
+      const slowTimer = window.setInterval(() => {
+        setProgressPct((prev) => {
+          const next = Math.min(92, prev + 1);
+          if (next >= 25) {
+            setProgressStageLabel(
+              useTranscript
+                ? next < 80
+                  ? 'Transcribing audio with Whisper...'
+                  : 'Picking the best moments...'
+                : 'Gemini is watching your video...'
+            );
+          }
+          return next;
+        });
+      }, 3000);
+      try {
+        const form = new FormData();
+        if (geminiReadsLink) {
+          form.append('url', linkUrl);
+        } else if (downloadedId) {
+          form.append('video_id', downloadedId);
+        } else if (targetFile) {
+          form.append('video', targetFile);
+        }
+        form.append('max_clips', String(maxClips));
+        if (useTranscript) {
+          form.append('llm_model', llmModel);
+        } else {
+          form.append('selectedModel', selectedModel);
+        }
+        const endpoint = geminiReadsLink
+          ? 'analyze-url'
+          : useTranscript
+            ? 'analyze-transcript'
+            : 'analyze-video';
+        const response = await fetch(`${BACKEND_URL}/api/${endpoint}`, {
+          method: 'POST',
+          body: form,
+        });
+        if (!response.ok) throw new Error(await readErrorDetail(response));
+        const data = await response.json();
+        if (!Array.isArray(data.clips) || data.clips.length === 0) {
+          throw new Error('No clips were found in this video.');
+        }
+        setClips(
+          data.clips.map((c: ViralClipSegment) => ({
+            ...c,
+            transcript_lines: c.transcript_lines ?? [],
+          }))
+        );
+        setActiveClipId(data.clips[0].clip_id);
+        setSourceVideoId(data.video_id ?? null);
+        setProgressPct(100);
+        setStep('results');
+      } catch (err: unknown) {
+        setPipelineError(err instanceof Error ? err.message : String(err));
+        setProgressPct(0);
+        setStep('import');
+      } finally {
+        window.clearInterval(slowTimer);
+      }
+      return;
+    }
 
     const progressTimer = window.setInterval(() => {
       setProgressPct((prev) => {
@@ -975,6 +1208,15 @@ export default function ClipperStudio() {
                 Turn Long Videos into Viral Shorts in 1 Click
               </h1>
 
+              {pipelineError && (
+                <div
+                  role="alert"
+                  className="w-full rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+                >
+                  {pipelineError}
+                </div>
+              )}
+
               {/* Single Unified Input Box with Two Tabs: Upload | Link */}
               <div className="w-full rounded-2xl border border-white/10 bg-[#121723] p-5 shadow-2xl">
                 <Tabs value={importTab} onValueChange={setImportTab}>
@@ -1043,7 +1285,7 @@ export default function ClipperStudio() {
                         type="url"
                         value={youtubeUrl}
                         onChange={(e) => setYoutubeUrl(e.target.value)}
-                        placeholder="Paste YouTube link..."
+                        placeholder="Paste any video link: YouTube, X, Reddit, TikTok, direct .mp4..."
                         className="flex-1 h-11 px-4 rounded-xl bg-[#0B0F17] border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#7C3AED]"
                       />
                       <button
@@ -1140,6 +1382,7 @@ export default function ClipperStudio() {
                       key={clip.clip_id}
                       clip={clip}
                       videoFileUrl={videoFileUrl}
+                      sourceVideoId={sourceVideoId}
                       captionPreset={captionPreset}
                       burnInCaptions={burnInCaptions}
                       dynamicZoom={dynamicZoom}
@@ -1339,19 +1582,82 @@ export default function ClipperStudio() {
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-slate-300 block">
-                    AI Model
+                    Analysis Engine
+                  </label>
+                  <select
+                    value={analysisEngine}
+                    onChange={(e) =>
+                      setAnalysisEngine(e.target.value as 'transcript' | 'gemini')
+                    }
+                    className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                  >
+                    <option value="transcript">Transcript (Whisper + OpenRouter)</option>
+                    <option value="gemini">Gemini watches the video</option>
+                  </select>
+                  <p className="text-[11px] text-slate-500">
+                    {analysisEngine === 'transcript'
+                      ? 'Precise word captions from the audio, no daily quota.'
+                      : 'Sees visuals too, but slow on long videos and has a daily quota.'}
+                  </p>
+                </div>
+
+                {analysisEngine === 'transcript' && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-300 block">
+                      Clip-Picking Model
+                    </label>
+                    <select
+                      value={llmModel}
+                      onChange={(e) => setLlmModel(e.target.value)}
+                      className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                    >
+                      {OPENROUTER_MODELS.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div
+                  className={`space-y-1.5 ${analysisEngine === 'gemini' ? '' : 'hidden'}`}
+                >
+                  <label className="text-xs font-medium text-slate-300 block">
+                    Gemini Model
                   </label>
                   <select
                     value={selectedModel}
                     onChange={(e) =>
                       setSelectedModel(
-                        e.target.value as 'gemini-2.5-flash' | 'gemini-2.5-pro'
+                        e.target.value as 'gemini-flash-latest' | 'gemini-pro-latest'
                       )
                     }
                     className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
                   >
-                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                    <option value="gemini-flash-latest">Gemini Flash (latest)</option>
+                    <option value="gemini-pro-latest">Gemini Pro (latest)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300 block">
+                    Number of Clips
+                  </label>
+                  <select
+                    value={maxClips}
+                    onChange={(e) => setMaxClips(Number(e.target.value))}
+                    className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                  >
+                    <option value={5}>Up to 5</option>
+                    <option value={10}>Up to 10</option>
+                    <option value={20}>
+                      Up to 20{analysisEngine === 'gemini' ? ' (line captions)' : ''}
+                    </option>
+                    <option value={40}>
+                      As many as possible
+                      {analysisEngine === 'gemini' ? ' (line captions)' : ''}
+                    </option>
                   </select>
                 </div>
 

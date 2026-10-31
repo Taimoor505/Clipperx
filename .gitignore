@@ -5,3 +5,16 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Local tooling and session logs
+.claude-logs/
+*.tsbuildinfo
+
+# The downloader lives in its own repository
+vidgrab/
