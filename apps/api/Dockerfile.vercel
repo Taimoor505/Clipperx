@@ -4,6 +4,8 @@ FROM python:3.12-slim
 # Install system FFmpeg binary
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+# JS runtime that yt-dlp needs for YouTube links
+COPY --from=denoland/deno:bin-2.5.6 /deno /usr/local/bin/deno
 
 # Set working directory
 WORKDIR /app
@@ -11,6 +13,14 @@ WORKDIR /app
 # Install Python packages
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Link downloader, from the separate vidgrab project. Build with:
+#   docker build --build-context vidgrab=vidgrab -f apps/api/Dockerfile.vercel -t clipperx-api apps/api
+COPY --from=vidgrab . /opt/vidgrab
+RUN pip install --no-cache-dir /opt/vidgrab
+
+# Whisper models download here on first use; mount a volume to keep them between runs
+ENV HF_HOME=/models
 
 # Copy application source code
 COPY . .

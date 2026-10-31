@@ -1,0 +1,3 @@
+[submodule "vidgrab"]
+	path = vidgrab
+	url = https://github.com/Taimoor505/Download-Manager.git

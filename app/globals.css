@@ -1,1 +1,4 @@
 @import "tailwindcss";
+
+/* Session logs contain Windows paths like \25487a that crash Tailwind's class scanner */
+@source not "../.claude-logs";

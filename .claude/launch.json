@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "clipperx-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "vidgrab",
+      "runtimeExecutable": "vidgrab/.venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "vidgrab", "serve", "--port", "8765", "--dir", "vidgrab/downloads"],
+      "port": 8765
+    }
+  ]
+}
