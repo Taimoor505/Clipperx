@@ -1,0 +1,25 @@
+{
+  "services": {
+    "frontend": {
+      "root": "apps/web"
+    },
+    "backend": {
+      "root": "apps/api",
+      "entrypoint": "Dockerfile.vercel"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
+    }
+  ]
+}
