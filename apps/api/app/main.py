@@ -87,6 +87,7 @@ downloads = DownloadManager(
     max_parallel=2,
     connections=8,
     max_height=1080,
+    media_only=True,
     max_bytes=int(os.environ.get("MAX_DOWNLOAD_MB", "4096")) * 1024 * 1024,
 )
 
