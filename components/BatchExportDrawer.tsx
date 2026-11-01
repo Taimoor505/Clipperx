@@ -362,7 +362,7 @@ export default function BatchExportDrawer({
   return (
     <div className="fixed bottom-4 inset-x-0 z-40 px-4 pointer-events-none flex justify-center">
       <div className="w-full max-w-[1380px] pointer-events-auto">
-        <div className="rounded-2xl border border-slate-700/90 bg-slate-950/95 backdrop-blur-xl shadow-2xl shadow-black/90 overflow-hidden">
+        <div className="rounded-2xl border border-line bg-canvas shadow-lg overflow-hidden">
           {/* =================================================================
               EXPANDABLE MULTI-JOB PROGRESS MONITOR & EXPORT CONFIGURATION DRAWER
              ================================================================= */}
@@ -373,15 +373,15 @@ export default function BatchExportDrawer({
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.22, ease: 'easeInOut' }}
-                className="overflow-hidden border-b border-slate-800/90"
+                className="overflow-hidden border-b border-line"
               >
                 <div className="p-5 space-y-4 max-h-[62vh] overflow-y-auto">
                   {/* Drawer Header + Global Queue Progress Bar */}
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3.5 border-b border-slate-800/80">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3.5 border-b border-line">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Layers className="w-4 h-4 text-cyan-400" />
-                        <h3 className="text-sm font-bold text-white tracking-tight">
+                        <Layers className="w-4 h-4 text-ink" />
+                        <h3 className="text-sm font-bold text-ink tracking-tight">
                           Batch Render &amp; Export Queue Monitor
                         </h3>
                         <Badge
@@ -392,7 +392,7 @@ export default function BatchExportDrawer({
                           Complete
                         </Badge>
                       </div>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-ink-muted">
                         Multi-job 9:16 FFmpeg dual-layer vertical render queue
                         with word-synchronized .ASS subtitle burn-in.
                       </p>
@@ -401,16 +401,16 @@ export default function BatchExportDrawer({
                     {/* Global Progress Bar for Total Queue Completion */}
                     <div className="w-full lg:w-80 space-y-1.5">
                       <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
-                        <span className="text-slate-300">
+                        <span className="text-on-accent">
                           TOTAL QUEUE COMPLETION
                         </span>
-                        <span className="text-cyan-300 font-bold">
+                        <span className="text-on-accent font-bold">
                           {queueStats.totalProgress}%
                         </span>
                       </div>
-                      <div className="w-full h-2 rounded-full bg-slate-900 border border-slate-800 overflow-hidden">
+                      <div className="w-full h-2 rounded-full bg-surface border border-line overflow-hidden">
                         <motion.div
-                          className="h-full bg-gradient-to-r from-violet-500 via-cyan-400 to-emerald-400"
+                          className="h-full bg-accent "
                           initial={{ width: 0 }}
                           animate={{ width: `${queueStats.totalProgress}%` }}
                           transition={{ duration: 0.25, ease: 'easeOut' }}
@@ -421,13 +421,13 @@ export default function BatchExportDrawer({
 
                   {/* 3. EXPORT CONFIGURATION BAR (Format, Resolution, FPS, Bitrate Mode) */}
                   {showExportSettings && (
-                    <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-3.5">
+                    <div className="rounded-xl border border-line bg-surface p-3.5">
                       <div className="flex items-center justify-between mb-2.5">
-                        <span className="text-[11px] font-mono uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                          <Settings2 className="w-3.5 h-3.5 text-violet-400" />
+                        <span className="text-[11px] font-mono uppercase tracking-wider text-ink flex items-center gap-1.5">
+                          <Settings2 className="w-3.5 h-3.5 text-ink" />
                           <span>Batch FFmpeg Export Configuration</span>
                         </span>
-                        <span className="text-[11px] font-mono text-cyan-300">
+                        <span className="text-[11px] font-mono text-ink">
                           {exportConfig.format} · {exportConfig.resolution} @{' '}
                           {exportConfig.fps} · {exportConfig.bitrateMode}
                         </span>
@@ -436,7 +436,7 @@ export default function BatchExportDrawer({
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         {/* Video Format Dropdown */}
                         <div className="space-y-1">
-                          <label className="text-[10px] font-mono uppercase text-slate-400 block">
+                          <label className="text-[10px] font-mono uppercase text-ink-muted block">
                             Video Format
                           </label>
                           <select
@@ -448,7 +448,7 @@ export default function BatchExportDrawer({
                                 format: e.target.value as 'MP4' | 'MOV',
                               }))
                             }
-                            className="w-full h-8 px-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-medium text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                            className="w-full h-8 px-2.5 rounded-lg bg-canvas border border-line text-xs font-medium text-ink focus:outline-none focus:border-accent cursor-pointer"
                           >
                             <option value="MP4">MP4 (H.264 + AAC)</option>
                             <option value="MOV">MOV (QuickTime ProRes)</option>
@@ -457,7 +457,7 @@ export default function BatchExportDrawer({
 
                         {/* Resolution Dropdown */}
                         <div className="space-y-1">
-                          <label className="text-[10px] font-mono uppercase text-slate-400 block">
+                          <label className="text-[10px] font-mono uppercase text-ink-muted block">
                             Vertical Resolution (9:16)
                           </label>
                           <select
@@ -471,7 +471,7 @@ export default function BatchExportDrawer({
                                   | '720x1280',
                               }))
                             }
-                            className="w-full h-8 px-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-medium text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                            className="w-full h-8 px-2.5 rounded-lg bg-canvas border border-line text-xs font-medium text-ink focus:outline-none focus:border-accent cursor-pointer"
                           >
                             <option value="1080x1920">
                               1080×1920 (Full HD 9:16)
@@ -484,7 +484,7 @@ export default function BatchExportDrawer({
 
                         {/* Frame Rate Dropdown */}
                         <div className="space-y-1">
-                          <label className="text-[10px] font-mono uppercase text-slate-400 block">
+                          <label className="text-[10px] font-mono uppercase text-ink-muted block">
                             Frame Rate
                           </label>
                           <select
@@ -496,7 +496,7 @@ export default function BatchExportDrawer({
                                 fps: e.target.value as '60fps' | '30fps',
                               }))
                             }
-                            className="w-full h-8 px-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-medium text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                            className="w-full h-8 px-2.5 rounded-lg bg-canvas border border-line text-xs font-medium text-ink focus:outline-none focus:border-accent cursor-pointer"
                           >
                             <option value="60fps">
                               60fps (Smooth Motion)
@@ -507,7 +507,7 @@ export default function BatchExportDrawer({
 
                         {/* Bitrate Mode Dropdown */}
                         <div className="space-y-1">
-                          <label className="text-[10px] font-mono uppercase text-slate-400 block">
+                          <label className="text-[10px] font-mono uppercase text-ink-muted block">
                             Bitrate Mode
                           </label>
                           <select
@@ -520,7 +520,7 @@ export default function BatchExportDrawer({
                                   .value as BatchExportConfig['bitrateMode'],
                               }))
                             }
-                            className="w-full h-8 px-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-medium text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                            className="w-full h-8 px-2.5 rounded-lg bg-canvas border border-line text-xs font-medium text-ink focus:outline-none focus:border-accent cursor-pointer"
                           >
                             <option value="CRF 18 (High)">
                               CRF 18 (Lossless-Grade ~16 Mbps)
@@ -539,8 +539,8 @@ export default function BatchExportDrawer({
 
                   {/* 2. MULTI-JOB PROGRESS LIST */}
                   {selectedClips.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 p-6 text-center space-y-2">
-                      <p className="text-xs text-slate-400">
+                    <div className="rounded-xl border border-dashed border-line bg-surface p-6 text-center space-y-2">
+                      <p className="text-xs text-ink-muted">
                         No clips currently selected in the batch queue. Use the
                         checkboxes on any Viral Clip Card or click below to
                         select all candidates.
@@ -551,7 +551,7 @@ export default function BatchExportDrawer({
                         size="sm"
                         onClick={onSelectAllClips}
                       >
-                        <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+                        <CheckSquare className="w-3.5 h-3.5 text-ink" />
                         <span>Select All {clips.length} Clips</span>
                       </Button>
                     </div>
@@ -569,18 +569,18 @@ export default function BatchExportDrawer({
                             key={clip.clip_id}
                             className={`rounded-xl border p-3 transition-colors ${
                               job.status === 'rendering'
-                                ? 'border-cyan-500/60 bg-slate-900/95'
+                                ? 'border-accent bg-surface'
                                 : job.status === 'complete'
-                                ? 'border-emerald-500/40 bg-emerald-950/10'
+                                ? 'border-success/40 bg-success/10'
                                 : job.status === 'failed'
-                                ? 'border-rose-500/50 bg-rose-950/15'
-                                : 'border-slate-800/90 bg-slate-900/60'
+                                ? 'border-danger/40 bg-danger/10'
+                                : 'border-line bg-surface'
                             }`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 tabular-nums">
-                                  <span className="text-cyan-400 font-semibold">
+                                <div className="flex items-center gap-1.5 text-[10px] font-mono text-ink-muted tabular-nums">
+                                  <span className="text-ink font-semibold">
                                     CLIP #{clip.clip_id}
                                   </span>
                                   <span>·</span>
@@ -590,7 +590,7 @@ export default function BatchExportDrawer({
                                   <span>·</span>
                                   <span>{exportConfig.resolution}</span>
                                 </div>
-                                <div className="text-xs font-semibold text-white truncate mt-0.5">
+                                <div className="text-xs font-semibold text-ink truncate mt-0.5">
                                   {clip.title}
                                 </div>
                               </div>
@@ -598,25 +598,25 @@ export default function BatchExportDrawer({
                               {/* Individual Job Status Badge (Queued, Rendering [X%], Complete, Failed) */}
                               <div className="shrink-0 flex items-center gap-1.5">
                                 {job.status === 'queued' && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-slate-700 bg-slate-800/90 text-[10px] font-mono text-slate-300">
-                                    <Clock className="w-3 h-3 text-slate-400" />
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-line bg-surface-2 text-[10px] font-mono text-ink">
+                                    <Clock className="w-3 h-3 text-ink-muted" />
                                     <span>Queued</span>
                                   </span>
                                 )}
                                 {job.status === 'rendering' && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-cyan-500/50 bg-cyan-500/15 text-[10px] font-mono font-semibold text-cyan-300 tabular-nums">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-accent bg-accent-soft text-[10px] font-mono font-semibold text-ink tabular-nums">
                                     <Loader2 className="w-3 h-3 animate-spin" />
                                     <span>Rendering {job.progress}%</span>
                                   </span>
                                 )}
                                 {job.status === 'complete' && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-emerald-500/50 bg-emerald-500/15 text-[10px] font-mono font-semibold text-emerald-300">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-success/40 bg-success/10 text-[10px] font-mono font-semibold text-success">
                                     <CheckCircle2 className="w-3 h-3" />
                                     <span>Complete</span>
                                   </span>
                                 )}
                                 {job.status === 'failed' && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-rose-500/50 bg-rose-500/15 text-[10px] font-mono font-semibold text-rose-300">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-danger/40 bg-danger/10 text-[10px] font-mono font-semibold text-danger">
                                     <AlertCircle className="w-3 h-3" />
                                     <span>Failed</span>
                                   </span>
@@ -628,7 +628,7 @@ export default function BatchExportDrawer({
                                     handleRetrySingleClip(clip.clip_id)
                                   }
                                   title="Render / Re-render this clip"
-                                  className="p-1 rounded border border-slate-800 bg-slate-900 text-slate-400 hover:text-white cursor-pointer"
+                                  className="p-1 rounded border border-line bg-surface text-ink-muted hover:text-ink cursor-pointer"
                                 >
                                   <RotateCcw className="w-3 h-3" />
                                 </button>
@@ -636,15 +636,15 @@ export default function BatchExportDrawer({
                             </div>
 
                             {/* Individual Clip Progress Bar */}
-                            <div className="mt-2.5 w-full h-1.5 rounded-full bg-slate-950 overflow-hidden">
+                            <div className="mt-2.5 w-full h-1.5 rounded-full bg-canvas overflow-hidden">
                               <div
                                 style={{ width: `${job.progress}%` }}
                                 className={`h-full transition-all duration-200 ${
                                   job.status === 'complete'
-                                    ? 'bg-emerald-400'
+                                    ? 'bg-success'
                                     : job.status === 'rendering'
-                                    ? 'bg-gradient-to-r from-violet-500 to-cyan-400'
-                                    : 'bg-slate-800'
+                                    ? 'bg-accent '
+                                    : 'bg-surface-2'
                                 }`}
                               />
                             </div>
@@ -663,23 +663,23 @@ export default function BatchExportDrawer({
               Shows: "[X] Clips Selected", "Render Selected (9:16)",
               "Download All (.ZIP)", and "Deselect All"
              ================================================================= */}
-          <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-3 bg-slate-950/95">
+          <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-3 bg-canvas">
             {/* Left: Selection Counter + Select/Deselect Controls */}
             <div className="flex flex-wrap items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => setIsExpanded((v) => !v)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-violet-500/40 bg-violet-500/15 text-xs font-mono font-semibold text-white hover:bg-violet-500/25 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-accent bg-accent-soft text-xs font-mono font-semibold text-ink hover:bg-accent-soft transition-colors cursor-pointer"
               >
-                <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+                <CheckSquare className="w-3.5 h-3.5 text-ink" />
                 <span>
                   {selectedClips.length}{' '}
                   {selectedClips.length === 1 ? 'Clip' : 'Clips'} Selected
                 </span>
                 {isExpanded ? (
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-300" />
+                  <ChevronDown className="w-3.5 h-3.5 text-ink" />
                 ) : (
-                  <ChevronUp className="w-3.5 h-3.5 text-slate-300" />
+                  <ChevronUp className="w-3.5 h-3.5 text-ink" />
                 )}
               </button>
 
@@ -687,7 +687,7 @@ export default function BatchExportDrawer({
                 <button
                   type="button"
                   onClick={onSelectAllClips}
-                  className="text-xs font-mono text-cyan-300 hover:text-cyan-200 px-2 py-1 rounded hover:bg-slate-900 transition-colors cursor-pointer"
+                  className="text-xs font-mono text-ink hover:text-ink px-2 py-1 rounded hover:bg-surface transition-colors cursor-pointer"
                 >
                   Select All ({clips.length})
                 </button>
@@ -697,7 +697,7 @@ export default function BatchExportDrawer({
                 type="button"
                 onClick={onDeselectAll}
                 disabled={selectedClips.length === 0}
-                className="inline-flex items-center gap-1 text-xs font-mono text-slate-400 hover:text-white disabled:opacity-40 px-2 py-1 rounded hover:bg-slate-900 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-xs font-mono text-ink-muted hover:text-ink disabled:opacity-40 px-2 py-1 rounded hover:bg-surface transition-colors cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Deselect All</span>
@@ -710,9 +710,9 @@ export default function BatchExportDrawer({
                   setIsExpanded(true);
                   setShowExportSettings(true);
                 }}
-                className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-900/90 text-[11px] font-mono text-slate-300 hover:border-slate-700 cursor-pointer"
+                className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-line bg-surface text-[11px] font-mono text-ink hover:border-line cursor-pointer"
               >
-                <Settings2 className="w-3 h-3 text-violet-400" />
+                <Settings2 className="w-3 h-3 text-ink" />
                 <span>
                   {exportConfig.format} · {exportConfig.resolution} ·{' '}
                   {exportConfig.fps} · {exportConfig.bitrateMode}
@@ -778,9 +778,9 @@ export default function BatchExportDrawer({
                 variant="outline"
                 size="sm"
                 onClick={() => setIsExpanded((v) => !v)}
-                className="border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-200 cursor-pointer"
+                className="border-line bg-surface hover:bg-surface-2 text-ink cursor-pointer"
               >
-                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <Layers className="w-3.5 h-3.5 text-ink" />
                 <span>{isExpanded ? 'Hide Queue' : 'Open Queue'}</span>
               </Button>
             </div>

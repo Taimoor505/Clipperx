@@ -204,14 +204,14 @@ export default function PipelineProgressModal({
   const renderStageIcon = (state: StageState) => {
     if (state === 'complete') {
       return (
-        <div className="h-8 w-8 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+        <div className="h-8 w-8 rounded-full bg-success/10 border border-success/40 flex items-center justify-center text-success shrink-0">
           <CheckCircle2 className="w-4 h-4" />
         </div>
       );
     }
     if (state === 'failed') {
       return (
-        <div className="h-8 w-8 rounded-full bg-rose-500/15 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+        <div className="h-8 w-8 rounded-full bg-danger/10 border border-danger/40 flex items-center justify-center text-danger shrink-0">
           <XCircle className="w-4 h-4" />
         </div>
       );
@@ -221,7 +221,7 @@ export default function PipelineProgressModal({
         <div className="relative h-8 w-8 flex items-center justify-center shrink-0">
           {/* Smooth Framer Motion pulse ring on active step */}
           <motion.span
-            className="absolute inset-0 rounded-full bg-cyan-400/25 border border-cyan-400/50"
+            className="absolute inset-0 rounded-full bg-accent-soft border border-accent"
             animate={{ scale: [1, 1.35, 1], opacity: [0.7, 0, 0.7] }}
             transition={{
               duration: 1.8,
@@ -229,14 +229,14 @@ export default function PipelineProgressModal({
               ease: 'easeInOut',
             }}
           />
-          <div className="relative h-8 w-8 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white shadow-sm">
+          <div className="relative h-8 w-8 rounded-full bg-accent flex items-center justify-center text-on-accent shadow-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
           </div>
         </div>
       );
     }
     return (
-      <div className="h-8 w-8 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 shrink-0">
+      <div className="h-8 w-8 rounded-full bg-surface border border-line flex items-center justify-center text-ink-subtle shrink-0">
         <Circle className="w-4 h-4" />
       </div>
     );
@@ -245,27 +245,27 @@ export default function PipelineProgressModal({
   const renderStateLabel = (state: StageState) => {
     if (state === 'complete') {
       return (
-        <span className="text-[11px] font-mono font-semibold text-emerald-400">
+        <span className="text-[11px] font-mono font-semibold text-success">
           Complete
         </span>
       );
     }
     if (state === 'failed') {
       return (
-        <span className="text-[11px] font-mono font-semibold text-rose-400">
+        <span className="text-[11px] font-mono font-semibold text-danger">
           Failed
         </span>
       );
     }
     if (state === 'active') {
       return (
-        <span className="text-[11px] font-mono font-semibold text-cyan-300">
+        <span className="text-[11px] font-mono font-semibold text-ink">
           Active
         </span>
       );
     }
     return (
-      <span className="text-[11px] font-mono text-slate-500">Pending</span>
+      <span className="text-[11px] font-mono text-ink-subtle">Pending</span>
     );
   };
 
@@ -275,7 +275,7 @@ export default function PipelineProgressModal({
       <div className="space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-xs font-semibold text-white truncate">
+            <span className="text-xs font-semibold text-ink truncate">
               {simulatedFailedStage !== null
                 ? 'Pipeline Halted — Stage Error Detected'
                 : pipelineStatusText || '4-Stage Video Processing Pipeline'}
@@ -283,8 +283,8 @@ export default function PipelineProgressModal({
           </div>
 
           <div className="flex items-center gap-3 text-xs font-mono tabular-nums shrink-0">
-            <span className="inline-flex items-center gap-1.5 text-slate-300">
-              <Clock className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="inline-flex items-center gap-1.5 text-ink">
+              <Clock className="w-3.5 h-3.5 text-ink" />
               <span>
                 ETA{' '}
                 {effectiveStep === 'complete'
@@ -292,22 +292,22 @@ export default function PipelineProgressModal({
                   : formatEtaSeconds(remainingSeconds)}
               </span>
             </span>
-            <span className="text-slate-600">·</span>
-            <span className="text-cyan-300 font-semibold">
+            <span className="text-ink-subtle">·</span>
+            <span className="text-ink font-semibold">
               {pipelinePercent}%
             </span>
           </div>
         </div>
 
         {/* Animated Progress Track */}
-        <div className="relative w-full h-2 rounded-full bg-slate-900 border border-slate-800/90 overflow-hidden">
+        <div className="relative w-full h-2 rounded-full bg-surface border border-line overflow-hidden">
           <motion.div
             className={`h-full origin-left ${
               effectiveStep === 'failed'
-                ? 'bg-rose-500'
+                ? 'bg-danger'
                 : effectiveStep === 'complete'
-                  ? 'bg-emerald-400'
-                  : 'bg-gradient-to-r from-violet-600 via-indigo-500 to-cyan-400'
+                  ? 'bg-success'
+                  : 'bg-accent '
             }`}
             initial={{ scaleX: 0 }}
             animate={{ scaleX: Math.max(0.03, pipelinePercent / 100) }}
@@ -343,19 +343,19 @@ export default function PipelineProgressModal({
               transition={{ duration: 0.2 }}
               className={`relative rounded-xl border p-3.5 transition-colors overflow-hidden ${
                 state === 'active'
-                  ? 'border-cyan-500/50 bg-slate-900/95 shadow-[0_0_25px_rgba(34,211,238,0.12)]'
+                  ? 'border-accent bg-surface shadow-[0_0_25px_rgba(34,211,238,0.12)]'
                   : state === 'complete'
-                    ? 'border-emerald-500/30 bg-slate-950/75'
+                    ? 'border-success/40 bg-canvas'
                     : state === 'failed'
-                      ? 'border-rose-500/50 bg-rose-950/20'
-                      : 'border-slate-800/80 bg-slate-950/50'
+                      ? 'border-danger/40 bg-danger/10'
+                      : 'border-line bg-canvas'
               }`}
             >
               {/* Subtle animated ambient pulse overlay on the active stage */}
               {state === 'active' && (
                 <motion.div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 bg-gradient-to-r from-violet-500/10 via-cyan-500/10 to-transparent"
+                  className="pointer-events-none absolute inset-0 bg-accent "
                   animate={{ opacity: [0.35, 0.85, 0.35] }}
                   transition={{
                     duration: 2.0,
@@ -374,15 +374,15 @@ export default function PipelineProgressModal({
                       <StageIcon
                         className={`w-3.5 h-3.5 shrink-0 ${
                           state === 'active'
-                            ? 'text-cyan-400'
+                            ? 'text-ink'
                             : state === 'complete'
-                              ? 'text-emerald-400'
+                              ? 'text-success'
                               : state === 'failed'
-                                ? 'text-rose-400'
-                                : 'text-slate-500'
+                                ? 'text-danger'
+                                : 'text-ink-subtle'
                         }`}
                       />
-                      <h4 className="text-xs font-semibold text-white truncate">
+                      <h4 className="text-xs font-semibold text-ink truncate">
                         {stage.title}
                       </h4>
                     </div>
@@ -390,7 +390,7 @@ export default function PipelineProgressModal({
                   </div>
 
                   {isDetailedModal && (
-                    <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                    <p className="text-[11px] text-ink-muted mt-1 leading-relaxed">
                       {stage.subtitle}
                     </p>
                   )}
@@ -399,12 +399,12 @@ export default function PipelineProgressModal({
                     <span
                       className={`truncate ${
                         state === 'active'
-                          ? 'text-cyan-300'
+                          ? 'text-ink'
                           : state === 'complete'
-                            ? 'text-slate-300'
+                            ? 'text-ink'
                             : state === 'failed'
-                              ? 'text-rose-300'
-                              : 'text-slate-500'
+                              ? 'text-danger'
+                              : 'text-ink-subtle'
                       }`}
                     >
                       {state === 'failed'
@@ -425,21 +425,21 @@ export default function PipelineProgressModal({
   return (
     <>
       {/* Inline Compact Progress Bar & Stage Monitor Card */}
-      <div className="rounded-xl border border-slate-800/90 bg-slate-950/90 p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+      <div className="rounded-xl border border-line bg-canvas p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2 border-b border-line pb-2.5">
           <div className="flex items-center gap-2">
             <span
               className={`h-2 w-2 rounded-full ${
                 effectiveStep === 'failed'
-                  ? 'bg-rose-400'
+                  ? 'bg-danger'
                   : effectiveStep === 'complete'
-                    ? 'bg-emerald-400'
+                    ? 'bg-success'
                     : isRunning
-                      ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]'
-                      : 'bg-slate-600'
+                      ? 'bg-accent shadow-[0_0_8px_rgba(34,211,238,0.9)]'
+                      : 'bg-surface-2'
               }`}
             />
-            <span className="text-xs font-semibold text-slate-200">
+            <span className="text-xs font-semibold text-ink">
               4-Stage Processing Telemetry
             </span>
           </div>
@@ -447,7 +447,7 @@ export default function PipelineProgressModal({
           <button
             type="button"
             onClick={() => setExpandedModal(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-800 bg-slate-900 hover:bg-slate-800 text-[11px] font-medium text-cyan-300 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-line bg-surface hover:bg-surface-2 text-[11px] font-medium text-ink transition-colors cursor-pointer"
           >
             <Maximize2 className="w-3 h-3" />
             <span>Open Pipeline Modal</span>
@@ -465,7 +465,7 @@ export default function PipelineProgressModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas "
             onClick={() => {
               setExpandedModal(false);
               onCloseModal?.();
@@ -477,18 +477,18 @@ export default function PipelineProgressModal({
               exit={{ opacity: 0, scale: 0.96, y: 10 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900/95 backdrop-blur-xl p-6 shadow-2xl shadow-violet-950/40 space-y-5"
+              className="w-full max-w-2xl rounded-2xl border border-line bg-surface p-6 shadow-lg space-y-5"
             >
               {/* Modal Header */}
-              <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-cyan-400" />
-                    <h3 className="text-base font-bold text-white">
+                    <Sparkles className="w-4 h-4 text-ink" />
+                    <h3 className="text-base font-bold text-ink">
                       ClipperX 4-Stage Video Processing Pipeline
                     </h3>
                   </div>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-xs text-ink-muted mt-1">
                     Real-time multimodal ingestion, Gemini token stream,
                     sentence-pause subtitle alignment, and FFmpeg 9:16
                     dual-layer rendering.
@@ -502,7 +502,7 @@ export default function PipelineProgressModal({
                     onCloseModal?.();
                   }}
                   aria-label="Close pipeline modal"
-                  className="p-1.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg border border-line bg-canvas text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -512,7 +512,7 @@ export default function PipelineProgressModal({
               {renderPipelineBody(true)}
 
               {/* Interactive Modal Footer: Simulate Pipeline Run / Test Error State / Close */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-line">
                 <div className="flex flex-wrap items-center gap-2">
                   {onSimulateRun && (
                     <button
@@ -522,7 +522,7 @@ export default function PipelineProgressModal({
                         onSimulateRun();
                       }}
                       disabled={isRunning}
-                      className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-accent disabled:opacity-50 text-on-accent text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5" />
                       <span>Run Pipeline Pass</span>
@@ -536,9 +536,9 @@ export default function PipelineProgressModal({
                         prev === null ? 2 : null
                       )
                     }
-                    className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-800 text-xs font-medium text-slate-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg border border-line bg-canvas hover:bg-surface-2 text-xs font-medium text-ink flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    <AlertTriangle className="w-3.5 h-3.5 text-ink" />
                     <span>
                       {simulatedFailedStage !== null
                         ? 'Clear Simulated Failure'
@@ -553,7 +553,7 @@ export default function PipelineProgressModal({
                         setSimulatedFailedStage(null);
                         onRetry();
                       }}
-                      className="px-3 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg border border-success/40 bg-success/10 text-success text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>Retry Stage</span>
@@ -567,7 +567,7 @@ export default function PipelineProgressModal({
                     setExpandedModal(false);
                     onCloseModal?.();
                   }}
-                  className="px-3.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-100 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-lg border border-line bg-surface-2 hover:bg-surface-2 text-xs font-medium text-ink flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Minimize2 className="w-3.5 h-3.5" />
                   <span>Minimize to Dashboard</span>

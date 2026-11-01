@@ -951,7 +951,7 @@ export default function VerticalShortPlayer({
   };
 
   return (
-    <div className="flex flex-col bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-5 shadow-xl shadow-violet-950/15 relative">
+    <div className="flex flex-col bg-surface border border-line rounded-2xl p-5 shadow-lg relative">
       {videoFileUrl && (
         <video
           ref={videoRef}
@@ -967,12 +967,12 @@ export default function VerticalShortPlayer({
       <div className="flex items-center justify-between gap-3 mb-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
-            <h3 className="text-sm font-semibold text-white truncate">
+            <span className="h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+            <h3 className="text-sm font-semibold text-ink truncate">
               9:16 Vertical Preview Card
             </h3>
           </div>
-          <p className="text-[11px] text-slate-400 font-mono tabular-nums mt-0.5 truncate">
+          <p className="text-[11px] text-ink-muted font-mono tabular-nums mt-0.5 truncate">
             Clip #{clip.clip_id} · {clip.start_time} → {clip.end_time}
           </p>
         </div>
@@ -982,8 +982,8 @@ export default function VerticalShortPlayer({
           onClick={() => setShowSafeZoneGuides((prev) => !prev)}
           className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
             showSafeZoneGuides
-              ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.15)]'
-              : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-slate-200'
+              ? 'bg-accent-soft border-accent text-ink shadow-[0_0_12px_rgba(34,211,238,0.15)]'
+              : 'bg-canvas border-line text-ink-muted hover:text-ink'
           }`}
         >
           <Eye className="w-3.5 h-3.5" />
@@ -992,7 +992,7 @@ export default function VerticalShortPlayer({
       </div>
 
       {/* 1. 9:16 Aspect Ratio Container (aspect-[9/16]) Centered in Sleek Glassmorphism Card */}
-      <div className="relative mx-auto w-full max-w-[290px] aspect-[9/16] rounded-xl overflow-hidden border border-slate-800/90 bg-slate-950 shadow-2xl select-none">
+      <div className="relative mx-auto w-full max-w-[290px] aspect-[9/16] rounded-xl overflow-hidden border border-line bg-canvas shadow-lg select-none">
         {/* Live 9:16 HTML5 Canvas Renderer */}
         <canvas
           ref={canvasRef}
@@ -1004,7 +1004,7 @@ export default function VerticalShortPlayer({
 
         {/* Top Bar Inside 9:16 Viewport: Quality Selector Badge (1080p 60fps) & Preset Tag */}
         <div className="pointer-events-none absolute top-3 inset-x-3 flex items-center justify-between gap-2 z-10">
-          <span className="px-2 py-0.5 rounded-md bg-slate-950/80 border border-slate-700/80 text-[10px] font-mono text-slate-300 backdrop-blur-sm">
+          <span className="px-2 py-0.5 rounded-md bg-canvas border border-line text-[10px] font-mono text-ink ">
             {captionPreset}
           </span>
 
@@ -1016,7 +1016,7 @@ export default function VerticalShortPlayer({
                 q === '1080p 60fps' ? '4K 60fps' : '1080p 60fps'
               );
             }}
-            className="pointer-events-auto px-2 py-0.5 rounded-md bg-violet-500/20 border border-violet-400/40 text-[10px] font-mono font-semibold text-violet-200 backdrop-blur-sm hover:bg-violet-500/30 transition-colors cursor-pointer"
+            className="pointer-events-auto px-2 py-0.5 rounded-md bg-accent-soft border border-accent text-[10px] font-mono font-semibold text-ink hover:bg-accent-soft transition-colors cursor-pointer"
           >
             {qualityMode}
           </button>
@@ -1026,41 +1026,41 @@ export default function VerticalShortPlayer({
         {showSafeZoneGuides && (
           <div className="pointer-events-none absolute inset-0 z-10">
             {/* Inner Safe Action Area Dashed Guide Box */}
-            <div className="absolute top-12 left-3 right-14 bottom-32 border border-dashed border-cyan-400/55 rounded-lg">
-              <span className="absolute top-1.5 left-2 px-1.5 py-0.5 rounded bg-slate-950/85 text-[9px] font-mono text-cyan-300 tracking-wide">
+            <div className="absolute top-12 left-3 right-14 bottom-32 border border-dashed border-accent rounded-lg">
+              <span className="absolute top-1.5 left-2 px-1.5 py-0.5 rounded bg-canvas text-[9px] font-mono text-ink tracking-wide">
                 SAFE CAPTION &amp; FACE ZONE
               </span>
             </div>
 
             {/* Right-Side TikTok / Reels Action Buttons Exclusion Zone */}
-            <div className="absolute right-2 bottom-28 w-11 py-2.5 rounded-xl border border-dashed border-rose-500/60 bg-rose-950/25 backdrop-blur-[2px] flex flex-col items-center gap-3.5">
-              <span className="text-[8px] font-mono font-semibold text-rose-300 uppercase tracking-tighter">
+            <div className="absolute right-2 bottom-28 w-11 py-2.5 rounded-xl border border-dashed border-danger/40 bg-danger/10 -[2px] flex flex-col items-center gap-3.5">
+              <span className="text-[8px] font-mono font-semibold text-danger uppercase tracking-tighter">
                 UI Zone
               </span>
-              <div className="flex flex-col items-center gap-0.5 text-white/75">
-                <Heart className="w-4 h-4 text-rose-400/80" />
+              <div className="flex flex-col items-center gap-0.5 text-ink">
+                <Heart className="w-4 h-4 text-danger" />
                 <span className="text-[8px] font-mono">48.2K</span>
               </div>
-              <div className="flex flex-col items-center gap-0.5 text-white/75">
+              <div className="flex flex-col items-center gap-0.5 text-ink">
                 <MessageCircle className="w-4 h-4" />
                 <span className="text-[8px] font-mono">1,420</span>
               </div>
-              <div className="flex flex-col items-center gap-0.5 text-white/75">
+              <div className="flex flex-col items-center gap-0.5 text-ink">
                 <Bookmark className="w-4 h-4" />
                 <span className="text-[8px] font-mono">9.1K</span>
               </div>
-              <div className="flex flex-col items-center gap-0.5 text-white/75">
-                <Disc3 className="w-4 h-4 text-cyan-300 animate-spin" />
+              <div className="flex flex-col items-center gap-0.5 text-ink">
+                <Disc3 className="w-4 h-4 text-ink animate-spin" />
               </div>
             </div>
 
             {/* Bottom Captions / Author Handle / Audio Ticker Exclusion Zone */}
-            <div className="absolute inset-x-2.5 bottom-14 h-14 rounded-lg border border-dashed border-amber-400/60 bg-amber-950/25 backdrop-blur-[2px] px-2.5 py-1.5 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-[9px] font-mono text-amber-300">
+            <div className="absolute inset-x-2.5 bottom-14 h-14 rounded-lg border border-dashed border-accent bg-accent-soft -[2px] px-2.5 py-1.5 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-[9px] font-mono text-ink">
                 <span>@creator_handle · Follow</span>
                 <span>BOTTOM UI EXCLUSION</span>
               </div>
-              <div className="text-[9px] text-slate-300/80 truncate font-sans">
+              <div className="text-[9px] text-ink truncate font-sans">
                 {clip.title} #shorts #viral #ai
               </div>
             </div>
@@ -1068,35 +1068,35 @@ export default function VerticalShortPlayer({
         )}
 
         {/* 3. CUSTOM VIDEO CONTROL BAR (Play/Pause, Timeline Scrubber, Timecode & Quality Badge) */}
-        <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent pt-5 pb-2.5 px-3">
+        <div className="absolute inset-x-0 bottom-0 z-20 bg-accent pt-5 pb-2.5 px-3">
           {/* Interactive Timeline Scrubber Bar */}
           <div
             ref={scrubberRef}
             onClick={handleScrubberClick}
             className="group relative w-full h-2 flex items-center cursor-pointer mb-2"
           >
-            <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+            <div className="w-full h-1 bg-surface-2 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-violet-500 to-cyan-400 origin-left"
+                className="h-full bg-accent origin-left"
                 style={{
                   transform: `scaleX(${Math.min(1, elapsedInClip / clipDuration)})`,
                 }}
               />
             </div>
             <div
-              className="absolute h-3 w-3 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.9)] -translate-x-1/2 transition-transform group-hover:scale-125"
+              className="absolute h-3 w-3 rounded-full bg-accent shadow-[0_0_8px_rgba(34,211,238,0.9)] -translate-x-1/2 transition-transform group-hover:scale-125"
               style={{
                 left: `${Math.min(100, (elapsedInClip / clipDuration) * 100)}%`,
               }}
             />
           </div>
 
-          <div className="flex items-center justify-between gap-2 text-[11px] text-slate-200 font-mono tabular-nums">
+          <div className="flex items-center justify-between gap-2 text-[11px] text-ink font-mono tabular-nums">
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={togglePlay}
-                className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                className="p-1.5 rounded-md bg-surface-2 hover:bg-white/20 text-ink transition-colors cursor-pointer"
                 aria-label={isPlaying ? 'Pause video' : 'Play video'}
               >
                 {isPlaying ? (
@@ -1108,7 +1108,7 @@ export default function VerticalShortPlayer({
               <button
                 type="button"
                 onClick={restartClip}
-                className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                className="p-1.5 rounded-md bg-surface-2 hover:bg-white/20 text-ink transition-colors cursor-pointer"
                 aria-label="Restart clip"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -1116,30 +1116,30 @@ export default function VerticalShortPlayer({
               <button
                 type="button"
                 onClick={() => setIsMuted((m) => !m)}
-                className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                className="p-1.5 rounded-md bg-surface-2 hover:bg-white/20 text-ink transition-colors cursor-pointer"
                 aria-label={isMuted ? 'Unmute' : 'Mute'}
               >
                 {isMuted ? (
-                  <VolumeX className="w-3.5 h-3.5 text-slate-400" />
+                  <VolumeX className="w-3.5 h-3.5 text-ink-muted" />
                 ) : (
-                  <Volume2 className="w-3.5 h-3.5 text-cyan-300" />
+                  <Volume2 className="w-3.5 h-3.5 text-ink" />
                 )}
               </button>
             </div>
 
             {/* Current Time vs Total Duration */}
             <div className="flex items-center gap-1.5">
-              <span className="text-white font-semibold">
+              <span className="text-ink font-semibold">
                 {formatPlayerTime(elapsedInClip)}
               </span>
-              <span className="text-slate-500">/</span>
-              <span className="text-slate-400">
+              <span className="text-ink-subtle">/</span>
+              <span className="text-ink-muted">
                 {formatPlayerTime(clipDuration)}
               </span>
             </div>
 
             {/* Quality Selector Badge */}
-            <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] text-cyan-300 font-semibold">
+            <span className="px-1.5 py-0.5 rounded bg-surface border border-line text-[10px] text-ink font-semibold">
               {qualityMode}
             </span>
           </div>
@@ -1148,7 +1148,7 @@ export default function VerticalShortPlayer({
 
       {/* Toast Notification Feedback */}
       {feedbackToast && (
-        <div className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center justify-center gap-1.5">
+        <div className="mt-3 px-3 py-1.5 rounded-lg bg-success/10 border border-success/40 text-success text-xs font-medium flex items-center justify-center gap-1.5">
           <Check className="w-3.5 h-3.5" />
           <span>{feedbackToast}</span>
         </div>
@@ -1161,7 +1161,7 @@ export default function VerticalShortPlayer({
           type="button"
           onClick={handleRenderAndDownloadShort}
           disabled={isRecording}
-          className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-violet-600 via-indigo-500 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 disabled:opacity-50 text-white font-semibold text-xs shadow-[0_0_24px_rgba(139,92,246,0.45)] hover:shadow-[0_0_30px_rgba(34,211,238,0.55)] transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+          className="flex-1 py-2.5 px-4 rounded-xl bg-accent disabled:opacity-50 text-on-accent font-semibold text-xs shadow-[0_0_24px_rgba(139,92,246,0.45)] hover:shadow-[0_0_30px_rgba(34,211,238,0.55)] transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
         >
           <Download className="w-4 h-4" />
           <span>
@@ -1177,28 +1177,28 @@ export default function VerticalShortPlayer({
           onClick={() => setIsDropdownOpen((o) => !o)}
           aria-expanded={isDropdownOpen}
           aria-label="More export and share options"
-          className="h-10 px-3 rounded-xl border border-slate-700/90 bg-slate-950/90 hover:bg-slate-800 text-slate-200 text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+          className="h-10 px-3 rounded-xl border border-line bg-canvas hover:bg-surface-2 text-ink text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer shrink-0"
         >
           <span>Options</span>
           <ChevronDown
             className={`w-3.5 h-3.5 transition-transform duration-150 ${
-              isDropdownOpen ? 'rotate-180 text-cyan-400' : ''
+              isDropdownOpen ? 'rotate-180 text-ink' : ''
             }`}
           />
         </button>
 
         {/* Dropdown Menu */}
         {isDropdownOpen && (
-          <div className="absolute right-0 bottom-12 w-56 rounded-xl border border-slate-800 bg-slate-950/95 backdrop-blur-xl p-1.5 shadow-2xl z-30 space-y-1">
+          <div className="absolute right-0 bottom-12 w-56 rounded-xl border border-line bg-canvas p-1.5 shadow-lg z-30 space-y-1">
             <button
               type="button"
               onClick={handleCopyShareLink}
-              className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-900 hover:text-cyan-300 transition-colors flex items-center gap-2.5 cursor-pointer"
+              className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-ink hover:bg-surface hover:text-ink transition-colors flex items-center gap-2.5 cursor-pointer"
             >
-              <Share2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <Share2 className="w-3.5 h-3.5 text-ink shrink-0" />
               <div>
                 <div className="font-semibold">Copy Share Link</div>
-                <div className="text-[10px] text-slate-400">
+                <div className="text-[10px] text-ink-muted">
                   Time-stamped preview URL
                 </div>
               </div>
@@ -1207,28 +1207,28 @@ export default function VerticalShortPlayer({
             <button
               type="button"
               onClick={handleDownloadAssSubtitles}
-              className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-900 hover:text-violet-300 transition-colors flex items-center gap-2.5 cursor-pointer"
+              className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-ink hover:bg-surface hover:text-ink transition-colors flex items-center gap-2.5 cursor-pointer"
             >
-              <FileCode2 className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+              <FileCode2 className="w-3.5 h-3.5 text-ink shrink-0" />
               <div>
                 <div className="font-semibold">Export Subtitles (.ASS)</div>
-                <div className="text-[10px] text-slate-400">
+                <div className="text-[10px] text-ink-muted">
                   Hormozi Karaoke \k tags
                 </div>
               </div>
             </button>
 
-            <div className="border-t border-slate-800/80 my-1" />
+            <div className="border-t border-line my-1" />
 
             <button
               type="button"
               onClick={handleCopyFfmpegCli}
-              className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-900 hover:text-emerald-300 transition-colors flex items-center gap-2.5 cursor-pointer"
+              className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-ink hover:bg-surface hover:text-success transition-colors flex items-center gap-2.5 cursor-pointer"
             >
-              <Terminal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <Terminal className="w-3.5 h-3.5 text-success shrink-0" />
               <div>
                 <div className="font-semibold">Copy FFmpeg 9:16 CLI</div>
-                <div className="text-[10px] text-slate-400">
+                <div className="text-[10px] text-ink-muted">
                   1080×1920 60fps render command
                 </div>
               </div>

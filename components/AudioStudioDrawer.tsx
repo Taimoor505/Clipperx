@@ -73,7 +73,7 @@ const AMBIENT_TRACK_PRESETS: AmbientTrackPreset[] = [
     genreTag: 'Chill / Storytelling',
     bpm: 84,
     description: 'Warm Rhodes chords & dusty vinyl groove for podcast hooks',
-    accentColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10',
+    accentColor: 'text-ink border-accent bg-accent-soft',
     baseFreqs: [220, 277.18, 329.63, 415.3],
   },
   {
@@ -82,7 +82,7 @@ const AMBIENT_TRACK_PRESETS: AmbientTrackPreset[] = [
     genreTag: 'Suspense / Tech',
     bpm: 110,
     description: 'Deep sub-bass pulse & rising minor ostinato for dramatic reveals',
-    accentColor: 'text-violet-300 border-violet-500/40 bg-violet-500/10',
+    accentColor: 'text-ink border-accent bg-accent-soft',
     baseFreqs: [110, 130.81, 164.81, 220],
   },
   {
@@ -91,7 +91,7 @@ const AMBIENT_TRACK_PRESETS: AmbientTrackPreset[] = [
     genreTag: 'High Velocity',
     bpm: 136,
     description: 'Punchy 808 drift bass & rhythmic cowbell for high-energy shorts',
-    accentColor: 'text-rose-300 border-rose-500/40 bg-rose-500/10',
+    accentColor: 'text-danger border-danger/40 bg-danger/10',
     baseFreqs: [146.83, 174.61, 220, 293.66],
   },
   {
@@ -100,7 +100,7 @@ const AMBIENT_TRACK_PRESETS: AmbientTrackPreset[] = [
     genreTag: 'SaaS / Educational',
     bpm: 102,
     description: 'Crisp marimba plucks & airy stereo pad for B2B & founder clips',
-    accentColor: 'text-cyan-300 border-cyan-500/40 bg-cyan-500/10',
+    accentColor: 'text-ink border-accent bg-accent-soft',
     baseFreqs: [261.63, 329.63, 392.0, 523.25],
   },
 ];
@@ -378,7 +378,7 @@ export default function AudioStudioDrawer({
   };
 
   return (
-    <Card className="border-slate-800/90 bg-slate-900/60 backdrop-blur-md shadow-xl shadow-cyan-950/10 overflow-hidden">
+    <Card className="border-line bg-surface shadow-lg overflow-hidden">
       {/* Hidden <audio> element for custom uploaded MP3/WAV */}
       {customAudioUrl && (
         <audio
@@ -392,11 +392,11 @@ export default function AudioStudioDrawer({
       {/* =====================================================================
           HEADER BAR
          ===================================================================== */}
-      <CardHeader className="pb-4 border-b border-slate-800/80 bg-slate-950/40">
+      <CardHeader className="pb-4 border-b border-line bg-canvas">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-300">
+              <div className="w-6 h-6 rounded-md bg-accent-soft border border-accent flex items-center justify-center text-ink">
                 <Music className="w-3.5 h-3.5" />
               </div>
               <CardTitle className="text-base">
@@ -413,7 +413,7 @@ export default function AudioStudioDrawer({
                 </Badge>
               )}
             </div>
-            <CardDescription className="text-xs text-slate-400">
+            <CardDescription className="text-xs text-ink-muted">
               Select a royalty-free ambient track or upload MP3/WAV, balance
               voiceover vs. music levels, and configure FFmpeg sidechain audio
               ducking.
@@ -426,9 +426,9 @@ export default function AudioStudioDrawer({
               variant="ghost"
               size="sm"
               onClick={handleResetAudioMix}
-              className="border border-slate-800 bg-slate-950/60 hover:bg-slate-800 text-slate-300 cursor-pointer"
+              className="border border-line bg-canvas hover:bg-surface-2 text-ink cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+              <RotateCcw className="w-3.5 h-3.5 text-ink-muted" />
               <span>Reset Mix</span>
             </Button>
 
@@ -437,9 +437,9 @@ export default function AudioStudioDrawer({
               variant="outline"
               size="sm"
               onClick={() => setIsDrawerOpen((v) => !v)}
-              className="border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 cursor-pointer"
+              className="border-line bg-surface hover:bg-surface-2 text-ink cursor-pointer"
             >
-              <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+              <Sliders className="w-3.5 h-3.5 text-ink" />
               <span>{isDrawerOpen ? 'Collapse Studio' : 'Expand Studio'}</span>
               {isDrawerOpen ? (
                 <ChevronUp className="w-3.5 h-3.5" />
@@ -458,11 +458,11 @@ export default function AudioStudioDrawer({
              ================================================================= */}
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="font-semibold text-ink flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-ink" />
                 <span>1. Royalty-Free Ambient Track Library</span>
               </span>
-              <span className="text-[11px] font-mono text-slate-400">
+              <span className="text-[11px] font-mono text-ink-muted">
                 Click play button to audition track in browser
               </span>
             </div>
@@ -478,8 +478,8 @@ export default function AudioStudioDrawer({
                     onClick={() => updateMix({ selectedTrackId: preset.id })}
                     className={`group rounded-xl border p-3.5 transition-all cursor-pointer ${
                       isSelected
-                        ? 'border-violet-500 bg-slate-900/95 ring-2 ring-violet-500/25 shadow-lg shadow-violet-950/25'
-                        : 'border-slate-800/90 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900/70'
+                        ? 'border-accent bg-surface ring-2 ring-accent shadow-lg '
+                        : 'border-line bg-canvas hover:border-line hover:bg-surface'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2 mb-2.5">
@@ -500,8 +500,8 @@ export default function AudioStudioDrawer({
                         }
                         className={`w-7 h-7 rounded-full flex items-center justify-center border transition-colors cursor-pointer ${
                           isPlaying
-                            ? 'bg-cyan-500 border-cyan-300 text-slate-950 shadow-[0_0_12px_rgba(34,211,238,0.6)]'
-                            : 'bg-slate-900 border-slate-700 text-slate-200 hover:border-cyan-400 hover:text-cyan-300'
+                            ? 'bg-accent border-accent text-slate-950 shadow-[0_0_12px_rgba(34,211,238,0.6)]'
+                            : 'bg-surface border-line text-ink hover:border-accent hover:text-ink'
                         }`}
                       >
                         {isPlaying ? (
@@ -513,7 +513,7 @@ export default function AudioStudioDrawer({
                     </div>
 
                     {/* Mini Animated Audio Equalizer Bars */}
-                    <div className="h-8 rounded-lg bg-slate-950/90 border border-slate-800/80 px-2.5 flex items-center justify-between gap-1 mb-2.5">
+                    <div className="h-8 rounded-lg bg-canvas border border-line px-2.5 flex items-center justify-between gap-1 mb-2.5">
                       {Array.from({ length: 16 }).map((_, barIdx) => {
                         const baseH =
                           25 + ((barIdx * 19 + preset.bpm) % 60);
@@ -527,10 +527,10 @@ export default function AudioStudioDrawer({
                             }}
                             className={`flex-1 rounded-full transition-all duration-150 ${
                               isPlaying
-                                ? 'bg-gradient-to-t from-violet-500 to-cyan-400 animate-pulse'
+                                ? 'bg-accent animate-pulse'
                                 : isSelected
-                                ? 'bg-violet-400/70'
-                                : 'bg-slate-700/70'
+                                ? 'bg-accent'
+                                : 'bg-surface-2'
                             }`}
                           />
                         );
@@ -538,14 +538,14 @@ export default function AudioStudioDrawer({
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-white">
+                      <span className="text-xs font-bold text-ink">
                         {preset.name}
                       </span>
                       {isSelected && (
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <Check className="w-3.5 h-3.5 text-success" />
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-400 leading-snug mt-0.5 line-clamp-2">
+                    <p className="text-[11px] text-ink-muted leading-snug mt-0.5 line-clamp-2">
                       {preset.description}
                     </p>
                   </div>
@@ -554,14 +554,14 @@ export default function AudioStudioDrawer({
             </div>
 
             {/* Custom Audio File Upload Slot (MP3/WAV) */}
-            <div className="rounded-xl border border-dashed border-slate-700/90 bg-slate-950/60 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="rounded-xl border border-dashed border-line bg-canvas p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400 shrink-0">
+                <div className="w-9 h-9 rounded-lg bg-surface border border-line flex items-center justify-center text-ink shrink-0">
                   <FileAudio className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-white truncate">
+                    <span className="text-xs font-semibold text-ink truncate">
                       {mixConfig.customFileName
                         ? `Custom Track: ${mixConfig.customFileName}`
                         : 'Upload Custom Ambient Track (MP3 / WAV)'}
@@ -572,7 +572,7 @@ export default function AudioStudioDrawer({
                       </Badge>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-400 truncate">
+                  <p className="text-[11px] text-ink-muted truncate">
                     Import your own brand stem or instrumental bed for sidechain
                     ducking
                   </p>
@@ -598,12 +598,12 @@ export default function AudioStudioDrawer({
                   >
                     {playingTrackId === 'custom_upload' ? (
                       <>
-                        <Pause className="w-3 h-3 text-cyan-400" />
+                        <Pause className="w-3 h-3 text-ink" />
                         <span>Pause Custom</span>
                       </>
                     ) : (
                       <>
-                        <Play className="w-3 h-3 text-cyan-400" />
+                        <Play className="w-3 h-3 text-ink" />
                         <span>Play Custom</span>
                       </>
                     )}
@@ -615,9 +615,9 @@ export default function AudioStudioDrawer({
                   variant="outline"
                   size="sm"
                   onClick={() => fileInputRef.current?.click()}
-                  className="h-8 px-3 text-xs border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 cursor-pointer"
+                  className="h-8 px-3 text-xs border-line bg-surface hover:bg-surface-2 text-ink cursor-pointer"
                 >
-                  <Upload className="w-3.5 h-3.5 text-violet-400" />
+                  <Upload className="w-3.5 h-3.5 text-ink" />
                   <span>
                     {mixConfig.customFileName ? 'Replace Audio' : 'Upload MP3/WAV'}
                   </span>
@@ -629,15 +629,15 @@ export default function AudioStudioDrawer({
           {/* =================================================================
               2 & 3. AUDIO MIXING SLIDERS + SIDECHAIN AUTO-DUCKING CONTROLS
              ================================================================= */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2 border-t border-slate-800/80">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2 border-t border-line">
             {/* 2. Audio Mixing Sliders (Voiceover 0-150% & Background Music 0-100%) */}
-            <div className="lg:col-span-6 rounded-xl border border-slate-800/90 bg-slate-950/65 p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
-                  <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+            <div className="lg:col-span-6 rounded-xl border border-line bg-canvas p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-line pb-2.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                  <Volume2 className="w-3.5 h-3.5 text-ink" />
                   <span>2. Voiceover &amp; Music Gain Staging</span>
                 </span>
-                <span className="text-[10px] font-mono text-slate-400">
+                <span className="text-[10px] font-mono text-ink-muted">
                   FFmpeg Volume Filter
                 </span>
               </div>
@@ -647,18 +647,18 @@ export default function AudioStudioDrawer({
                 <div className="flex items-center justify-between">
                   <label
                     htmlFor="voiceover-volume-slider"
-                    className="text-xs font-medium text-slate-200 flex items-center gap-1.5"
+                    className="text-xs font-medium text-ink flex items-center gap-1.5"
                   >
-                    <Mic className="w-3.5 h-3.5 text-emerald-400" />
+                    <Mic className="w-3.5 h-3.5 text-success" />
                     <span>Primary Voiceover Volume</span>
                   </label>
                   <div className="flex items-center gap-1.5">
                     {mixConfig.voiceVolumePct > 100 && (
-                      <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-mono text-emerald-300">
+                      <span className="px-1.5 py-0.2 rounded bg-success/10 border border-success/40 text-[10px] font-mono text-success">
                         +{mixConfig.voiceVolumePct - 100}% Vocal Boost
                       </span>
                     )}
-                    <span className="text-xs font-mono font-bold text-white tabular-nums">
+                    <span className="text-xs font-mono font-bold text-ink tabular-nums">
                       {mixConfig.voiceVolumePct}%
                     </span>
                   </div>
@@ -676,7 +676,7 @@ export default function AudioStudioDrawer({
                   }
                   className="w-full accent-emerald-400 cursor-pointer"
                 />
-                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 tabular-nums">
+                <div className="flex items-center justify-between text-[10px] font-mono text-ink-muted tabular-nums">
                   <span>0% (Mute)</span>
                   <span>100% (Unity 0dB)</span>
                   <span>150% (+3.5dB Vocal Punch)</span>
@@ -684,16 +684,16 @@ export default function AudioStudioDrawer({
               </div>
 
               {/* Background Music Volume Slider (0% to 100%) */}
-              <div className="space-y-2 pt-2 border-t border-slate-800/60">
+              <div className="space-y-2 pt-2 border-t border-line">
                 <div className="flex items-center justify-between">
                   <label
                     htmlFor="bgm-volume-slider"
-                    className="text-xs font-medium text-slate-200 flex items-center gap-1.5"
+                    className="text-xs font-medium text-ink flex items-center gap-1.5"
                   >
-                    <Music className="w-3.5 h-3.5 text-violet-400" />
+                    <Music className="w-3.5 h-3.5 text-ink" />
                     <span>Background Music Bed Volume</span>
                   </label>
-                  <span className="text-xs font-mono font-bold text-cyan-300 tabular-nums">
+                  <span className="text-xs font-mono font-bold text-ink tabular-nums">
                     {mixConfig.musicVolumePct}%
                   </span>
                 </div>
@@ -710,9 +710,9 @@ export default function AudioStudioDrawer({
                   }
                   className="w-full accent-violet-500 cursor-pointer"
                 />
-                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 tabular-nums">
+                <div className="flex items-center justify-between text-[10px] font-mono text-ink-muted tabular-nums">
                   <span>0% (Off)</span>
-                  <span className="text-cyan-400">
+                  <span className="text-ink">
                     15–22% (Recommended Bed)
                   </span>
                   <span>100% (Full Level)</span>
@@ -721,13 +721,13 @@ export default function AudioStudioDrawer({
             </div>
 
             {/* 3. Auto-Ducking Toggle & Threshold Sensitivity Controls */}
-            <div className="lg:col-span-6 rounded-xl border border-slate-800/90 bg-slate-950/65 p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+            <div className="lg:col-span-6 rounded-xl border border-line bg-canvas p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-line pb-2.5">
                 <div className="space-y-0.5">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-200 block">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-ink block">
                     3. Enable Sidechain Audio Ducking
                   </span>
-                  <span className="text-[11px] text-slate-400 block">
+                  <span className="text-[11px] text-ink-muted block">
                     Automatically compresses BGM whenever speech is detected
                   </span>
                 </div>
@@ -752,11 +752,11 @@ export default function AudioStudioDrawer({
                   <div className="flex items-center justify-between text-xs">
                     <label
                       htmlFor="ducking-threshold-slider"
-                      className="text-slate-300 font-medium"
+                      className="text-ink font-medium"
                     >
                       Speech Detection Threshold Sensitivity
                     </label>
-                    <span className="font-mono font-bold text-cyan-300 tabular-nums">
+                    <span className="font-mono font-bold text-ink tabular-nums">
                       {mixConfig.duckingThreshold.toFixed(2)} (
                       {mixConfig.duckingThreshold <= 0.06
                         ? 'Aggressive'
@@ -780,7 +780,7 @@ export default function AudioStudioDrawer({
                     }
                     className="w-full accent-cyan-400 cursor-pointer"
                   />
-                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <div className="flex items-center justify-between text-[10px] font-mono text-ink-muted">
                     <span>0.02 (Ducks on soft whispers)</span>
                     <span>0.08 (Default)</span>
                     <span>0.25 (Loud peaks only)</span>
@@ -789,8 +789,8 @@ export default function AudioStudioDrawer({
 
                 {/* Compression Ratio Selector + Live Gain Reduction Meter */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-2.5 space-y-1">
-                    <span className="text-[10px] font-mono uppercase text-slate-400 block">
+                  <div className="rounded-lg border border-line bg-surface p-2.5 space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-ink-muted block">
                       Compression Ratio &amp; Envelope
                     </span>
                     <div className="flex items-center gap-1.5">
@@ -801,8 +801,8 @@ export default function AudioStudioDrawer({
                           onClick={() => updateMix({ duckingRatio: r })}
                           className={`px-2 py-1 rounded text-[11px] font-mono transition-colors cursor-pointer ${
                             mixConfig.duckingRatio === r
-                              ? 'bg-violet-500/25 border border-violet-400 text-white font-bold'
-                              : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                              ? 'bg-accent-soft border border-accent text-ink font-bold'
+                              : 'bg-canvas border border-line text-ink-muted hover:text-ink'
                           }`}
                         >
                           {r}:1
@@ -812,14 +812,14 @@ export default function AudioStudioDrawer({
                   </div>
 
                   {/* Live Sidechain Gain Reduction Telemetry Meter */}
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-2.5 space-y-1.5">
+                  <div className="rounded-lg border border-line bg-surface p-2.5 space-y-1.5">
                     <div className="flex items-center justify-between text-[10px] font-mono">
-                      <span className="text-slate-400">GAIN REDUCTION</span>
-                      <span className="text-amber-300 font-bold tabular-nums">
+                      <span className="text-ink-muted">GAIN REDUCTION</span>
+                      <span className="text-ink font-bold tabular-nums">
                         -{simulatedDuckingDb} dB
                       </span>
                     </div>
-                    <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
+                    <div className="w-full h-2 rounded-full bg-canvas overflow-hidden">
                       <div
                         style={{
                           width: `${Math.min(
@@ -827,7 +827,7 @@ export default function AudioStudioDrawer({
                             (simulatedDuckingDb / 18) * 100
                           )}%`,
                         }}
-                        className="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500 transition-all duration-150"
+                        className="h-full bg-accent transition-all duration-150"
                       />
                     </div>
                   </div>
@@ -837,20 +837,20 @@ export default function AudioStudioDrawer({
           </div>
 
           {/* Generated FFmpeg Sidechain Audio Ducking Filter Preview */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-1.5">
+          <div className="rounded-xl border border-line bg-canvas p-3 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Code2 className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+                <Code2 className="w-3.5 h-3.5 text-ink" />
                 <span>Live FFmpeg Sidechain Audio Filter Graph</span>
               </span>
               <button
                 type="button"
                 onClick={handleCopyFilter}
-                className="inline-flex items-center gap-1 text-[10px] font-mono text-cyan-300 hover:text-cyan-200 cursor-pointer"
+                className="inline-flex items-center gap-1 text-[10px] font-mono text-ink hover:text-ink cursor-pointer"
               >
                 {copiedFilter ? (
                   <>
-                    <Check className="w-3 h-3 text-emerald-400" />
+                    <Check className="w-3 h-3 text-success" />
                     <span>Copied</span>
                   </>
                 ) : (
@@ -861,7 +861,7 @@ export default function AudioStudioDrawer({
                 )}
               </button>
             </div>
-            <pre className="text-[10px] font-mono text-slate-300 overflow-x-auto pb-1">
+            <pre className="text-[10px] font-mono text-ink overflow-x-auto pb-1">
               <code>{ffmpegAudioFilterString}</code>
             </pre>
           </div>

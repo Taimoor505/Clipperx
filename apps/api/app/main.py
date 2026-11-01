@@ -601,6 +601,21 @@ def store_image(upload: Optional[UploadFile], workdir: Path, name: str) -> Optio
     return path
 
 
+def save_to_output(rendered: Path, output_dir: Path, filename: str) -> Path:
+    """Moves a render into the desktop app's clips folder under a safe, unused name."""
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", Path(filename).name).strip(" .") or "clip.mp4"
+    if not name.lower().endswith(".mp4"):
+        name += ".mp4"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    dest = output_dir / name
+    n = 1
+    while dest.exists():
+        dest = output_dir / f"{Path(name).stem} ({n}).mp4"
+        n += 1
+    shutil.move(str(rendered), dest)
+    return dest
+
+
 def fit_inside(src_w: int, src_h: int, box_w: int, box_h: int) -> tuple:
     scale = min(box_w / src_w, box_h / src_h)
     return even(src_w * scale), even(src_h * scale)
@@ -624,6 +639,8 @@ def render_vertical_short(
     logo_position: str = Form("top-right"),
     logo_size: float = Form(0.16),  # share of the canvas width
     logo_opacity: float = Form(0.9),
+    save: bool = Form(False),  # desktop app: write into CLIPPERX_OUTPUT_DIR instead of returning
+    filename: str = Form(""),
 ):
     """
     Renders one clip in a single FFmpeg pass:
@@ -745,6 +762,12 @@ def render_vertical_short(
         str(final_path),
     ]
     run_ffmpeg(render_cmd, cwd=workdir)
+
+    output_dir = os.environ.get("CLIPPERX_OUTPUT_DIR")
+    if save and output_dir:
+        saved = save_to_output(final_path, Path(output_dir), filename or f"clipperx_short_{W}x{H}.mp4")
+        shutil.rmtree(workdir, ignore_errors=True)
+        return {"saved_to": str(saved), "layout": layout}
 
     return FileResponse(
         path=str(final_path),

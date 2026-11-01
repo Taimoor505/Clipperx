@@ -593,15 +593,15 @@ export default function TranscriptEditor({
   );
 
   return (
-    <Card className="border-slate-800/90 bg-slate-900/60 backdrop-blur-md shadow-xl shadow-violet-950/10 overflow-hidden">
+    <Card className="border-line bg-surface shadow-lg overflow-hidden">
       {/* =====================================================================
           HEADER & UTILITY ACTION BAR
          ===================================================================== */}
-      <CardHeader className="pb-4 border-b border-slate-800/80 bg-slate-950/40">
+      <CardHeader className="pb-4 border-b border-line bg-canvas">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-300">
+              <div className="w-6 h-6 rounded-md bg-accent-soft border border-accent flex items-center justify-center text-ink">
                 <Edit3 className="w-3.5 h-3.5" />
               </div>
               <CardTitle className="text-base">
@@ -620,7 +620,7 @@ export default function TranscriptEditor({
                 </Badge>
               )}
             </div>
-            <CardDescription className="text-xs text-slate-400">
+            <CardDescription className="text-xs text-ink-muted">
               Click any word chip to edit text, inject viral emojis (💰, 🔥, 🚀),
               or fine-tune word &amp; sentence cut boundaries with ±0.1s precision.
             </CardDescription>
@@ -633,9 +633,9 @@ export default function TranscriptEditor({
               variant="outline"
               size="sm"
               onClick={handleAutoCapitalizeAll}
-              className="border-slate-700/80 bg-slate-900/90 hover:bg-slate-800 text-slate-200 cursor-pointer"
+              className="border-line bg-surface hover:bg-surface-2 text-ink cursor-pointer"
             >
-              <Type className="w-3.5 h-3.5 text-cyan-400" />
+              <Type className="w-3.5 h-3.5 text-ink" />
               <span>Auto-Capitalize All</span>
             </Button>
 
@@ -644,9 +644,9 @@ export default function TranscriptEditor({
               variant="outline"
               size="sm"
               onClick={handleApplyViralEmojis}
-              className="border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20 text-violet-200 cursor-pointer"
+              className="border-accent bg-accent-soft hover:bg-accent-soft text-ink cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <Sparkles className="w-3.5 h-3.5 text-ink" />
               <span>Apply Viral Emojis</span>
             </Button>
 
@@ -655,9 +655,9 @@ export default function TranscriptEditor({
               variant="ghost"
               size="sm"
               onClick={handleResetTranscript}
-              className="border border-slate-800 bg-slate-950/60 hover:bg-slate-800/80 text-slate-300 cursor-pointer"
+              className="border border-line bg-canvas hover:bg-surface-2 text-ink cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+              <RotateCcw className="w-3.5 h-3.5 text-ink-muted" />
               <span>Reset Transcript</span>
             </Button>
           </div>
@@ -667,40 +667,40 @@ export default function TranscriptEditor({
             3. LIVE SYNC PREVIEW TIMELINE BAR
             Hovering over any word or sentence highlights its exact frame range
            =================================================================== */}
-        <div className="mt-4 pt-3.5 border-t border-slate-800/80 space-y-2">
+        <div className="mt-4 pt-3.5 border-t border-line space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono tabular-nums">
             <div className="flex items-center gap-2">
-              <Film className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-slate-300 font-semibold uppercase tracking-wider">
+              <Film className="w-3.5 h-3.5 text-ink" />
+              <span className="text-ink font-semibold uppercase tracking-wider">
                 Live Frame Sync Timeline
               </span>
               {hoveredRange ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/40 text-cyan-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-accent-soft border border-accent text-ink">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                   <span>
                     {hoveredRange.type === 'word' ? 'WORD' : 'SENTENCE'}: &ldquo;
                     {hoveredRange.label}&rdquo;
                   </span>
-                  <span className="text-cyan-300 font-semibold">
+                  <span className="text-ink font-semibold">
                     [{hoveredRange.start.toFixed(2)}s →{' '}
                     {hoveredRange.end.toFixed(2)}s]
                   </span>
-                  <span className="text-slate-400">
+                  <span className="text-ink-muted">
                     · Frame #{Math.round(hoveredRange.start * 60)}–
                     {Math.round(hoveredRange.end * 60)} @ 60fps
                   </span>
                 </span>
               ) : (
-                <span className="text-slate-500">
+                <span className="text-ink-subtle">
                   Hover any word chip or sentence block below to inspect frame
                   sync
                 </span>
               )}
             </div>
 
-            <div className="text-slate-400">
+            <div className="text-ink-muted">
               <span>Window: 0.0s → {maxTimelineWindow.toFixed(1)}s</span>
-              <span className="mx-1.5 text-slate-600">|</span>
+              <span className="mx-1.5 text-ink-subtle">|</span>
               <span>Clip Total: {clipDuration.toFixed(1)}s</span>
             </div>
           </div>
@@ -708,7 +708,7 @@ export default function TranscriptEditor({
           {/* Interactive Timeline Bar with Sentence Blocks, Draggable Handles & Word Markers */}
           <div
             ref={timelineTrackRef}
-            className="relative w-full h-10 rounded-lg bg-slate-950 border border-slate-800/90 overflow-hidden select-none"
+            className="relative w-full h-10 rounded-lg bg-canvas border border-line overflow-hidden select-none"
           >
             {/* Subtle 1-second ruler ticks */}
             {Array.from({ length: Math.ceil(maxTimelineWindow) + 1 }).map(
@@ -719,10 +719,10 @@ export default function TranscriptEditor({
                   <div
                     key={secIdx}
                     style={{ left: `${leftPct}%` }}
-                    className="absolute top-0 bottom-0 border-l border-slate-800/60 pointer-events-none"
+                    className="absolute top-0 bottom-0 border-l border-line pointer-events-none"
                   >
                     {secIdx % 2 === 0 && (
-                      <span className="absolute top-0.5 left-1 text-[9px] font-mono text-slate-600 tabular-nums">
+                      <span className="absolute top-0.5 left-1 text-[9px] font-mono text-ink-subtle tabular-nums">
                         {secIdx}s
                       </span>
                     )}
@@ -758,8 +758,8 @@ export default function TranscriptEditor({
                   }}
                   className={`absolute top-3.5 bottom-1.5 rounded-md transition-colors ${
                     isSentenceHovered
-                      ? 'bg-violet-500/35 border border-violet-400 z-10'
-                      : 'bg-slate-800/75 border border-slate-700/80'
+                      ? 'bg-accent border border-accent z-10'
+                      : 'bg-surface-2 border border-line'
                   }`}
                 >
                   {/* Draggable Left Start Handle */}
@@ -769,11 +769,11 @@ export default function TranscriptEditor({
                       setDraggingHandle({ lineIdx: lIdx, edge: 'start' });
                     }}
                     title={`Drag to adjust Sentence #${lIdx + 1} Start (${line.start_offset.toFixed(1)}s)`}
-                    className="absolute left-0 top-0 bottom-0 w-2 bg-violet-400/80 hover:bg-cyan-400 cursor-ew-resize rounded-l flex items-center justify-center z-20"
+                    className="absolute left-0 top-0 bottom-0 w-2 bg-accent hover:bg-accent cursor-ew-resize rounded-l flex items-center justify-center z-20"
                   />
 
                   {/* Sentence Label inside Track */}
-                  <div className="px-2.5 h-full flex items-center justify-between text-[10px] font-mono text-slate-300 truncate pointer-events-none">
+                  <div className="px-2.5 h-full flex items-center justify-between text-[10px] font-mono text-ink truncate pointer-events-none">
                     <span className="truncate">
                       S{lIdx + 1}: {line.text}
                     </span>
@@ -786,7 +786,7 @@ export default function TranscriptEditor({
                       setDraggingHandle({ lineIdx: lIdx, edge: 'end' });
                     }}
                     title={`Drag to adjust Sentence #${lIdx + 1} End (${line.end_offset.toFixed(1)}s)`}
-                    className="absolute right-0 top-0 bottom-0 w-2 bg-violet-400/80 hover:bg-cyan-400 cursor-ew-resize rounded-r flex items-center justify-center z-20"
+                    className="absolute right-0 top-0 bottom-0 w-2 bg-accent hover:bg-accent cursor-ew-resize rounded-r flex items-center justify-center z-20"
                   />
                 </div>
               );
@@ -810,9 +810,9 @@ export default function TranscriptEditor({
                     )
                   )}%`,
                 }}
-                className="absolute top-0 bottom-0 bg-cyan-400/30 border-x-2 border-cyan-300 shadow-[0_0_16px_rgba(34,211,238,0.45)] pointer-events-none z-30 transition-all duration-75"
+                className="absolute top-0 bottom-0 bg-accent-soft border-x-2 border-accent shadow-[0_0_16px_rgba(34,211,238,0.45)] pointer-events-none z-30 transition-all duration-75"
               >
-                <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 px-1.5 py-0.2 bg-cyan-400 text-slate-950 font-mono font-bold text-[9px] rounded-b whitespace-nowrap">
+                <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 px-1.5 py-0.2 bg-accent text-slate-950 font-mono font-bold text-[9px] rounded-b whitespace-nowrap">
                   {hoveredRange.start.toFixed(2)}s
                 </div>
               </div>
@@ -851,18 +851,18 @@ export default function TranscriptEditor({
               }
               className={`rounded-xl border p-3.5 transition-all ${
                 isLineHovered
-                  ? 'border-violet-500/60 bg-slate-900/95 shadow-md shadow-violet-950/15'
-                  : 'border-slate-800/90 bg-slate-950/65 hover:border-slate-700/80'
+                  ? 'border-accent bg-surface shadow-md '
+                  : 'border-line bg-canvas hover:border-line'
               }`}
             >
               {/* 2. Sentence Cut Boundaries Bar (±0.1s precision step buttons + timecodes) */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 mb-3 border-b border-slate-800/80">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 mb-3 border-b border-line">
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-500/15 border border-violet-500/30 text-[11px] font-mono font-semibold text-violet-300 tabular-nums">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent-soft border border-accent text-[11px] font-mono font-semibold text-ink tabular-nums">
                     <Scissors className="w-3 h-3" />
                     <span>SENTENCE #{lineIdx + 1}</span>
                   </span>
-                  <span className="text-[11px] font-mono text-slate-400 tabular-nums">
+                  <span className="text-[11px] font-mono text-ink-muted tabular-nums">
                     Duration: {sentenceDuration.toFixed(1)}s ·{' '}
                     {line.words?.length || 0} words
                   </span>
@@ -871,9 +871,9 @@ export default function TranscriptEditor({
                 {/* Sentence Start & End Numerical Step Controls (±0.1s precision) */}
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Sentence Start Timecode ±0.1s */}
-                  <div className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/90 px-2 py-1">
-                    <GripVertical className="w-3 h-3 text-slate-500" />
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                  <div className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1">
+                    <GripVertical className="w-3 h-3 text-ink-subtle" />
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-ink-muted">
                       In:
                     </span>
                     <button
@@ -882,11 +882,11 @@ export default function TranscriptEditor({
                         handleAdjustSentenceBoundary(lineIdx, 'start', -0.1)
                       }
                       title="Decrease sentence start by 0.1s"
-                      className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono tabular-nums text-slate-200 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-2 text-[10px] font-mono tabular-nums text-ink transition-colors cursor-pointer"
                     >
                       -0.1s
                     </button>
-                    <span className="px-1.5 text-xs font-mono font-semibold text-cyan-300 tabular-nums">
+                    <span className="px-1.5 text-xs font-mono font-semibold text-ink tabular-nums">
                       {formatTimecode(line.start_offset)}
                     </span>
                     <button
@@ -895,17 +895,17 @@ export default function TranscriptEditor({
                         handleAdjustSentenceBoundary(lineIdx, 'start', 0.1)
                       }
                       title="Increase sentence start by 0.1s"
-                      className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono tabular-nums text-slate-200 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-2 text-[10px] font-mono tabular-nums text-ink transition-colors cursor-pointer"
                     >
                       +0.1s
                     </button>
                   </div>
 
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-600 hidden sm:block" />
+                  <ChevronRight className="w-3.5 h-3.5 text-ink-subtle hidden sm:block" />
 
                   {/* Sentence End Timecode ±0.1s */}
-                  <div className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/90 px-2 py-1">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                  <div className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-ink-muted">
                       Out:
                     </span>
                     <button
@@ -914,11 +914,11 @@ export default function TranscriptEditor({
                         handleAdjustSentenceBoundary(lineIdx, 'end', -0.1)
                       }
                       title="Decrease sentence end by 0.1s"
-                      className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono tabular-nums text-slate-200 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-2 text-[10px] font-mono tabular-nums text-ink transition-colors cursor-pointer"
                     >
                       -0.1s
                     </button>
-                    <span className="px-1.5 text-xs font-mono font-semibold text-violet-300 tabular-nums">
+                    <span className="px-1.5 text-xs font-mono font-semibold text-ink tabular-nums">
                       {formatTimecode(line.end_offset)}
                     </span>
                     <button
@@ -927,7 +927,7 @@ export default function TranscriptEditor({
                         handleAdjustSentenceBoundary(lineIdx, 'end', 0.1)
                       }
                       title="Increase sentence end by 0.1s"
-                      className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono tabular-nums text-slate-200 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-2 text-[10px] font-mono tabular-nums text-ink transition-colors cursor-pointer"
                     >
                       +0.1s
                     </button>
@@ -975,16 +975,16 @@ export default function TranscriptEditor({
                         }}
                         className={`group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer ${
                           isWordSelected
-                            ? 'border-cyan-400 bg-cyan-500/20 text-white ring-2 ring-cyan-400/40 shadow-sm'
+                            ? 'border-accent bg-accent-soft text-ink ring-2 ring-accent shadow-sm'
                             : isWordHovered
-                            ? 'border-violet-400/80 bg-violet-500/20 text-white'
+                            ? 'border-accent bg-accent-soft text-ink'
                             : hasEmoji
-                            ? 'border-amber-500/40 bg-amber-500/10 text-amber-100 hover:border-amber-400/70'
-                            : 'border-slate-800 bg-slate-900/90 text-slate-200 hover:border-slate-700 hover:bg-slate-800/80'
+                            ? 'border-accent bg-accent-soft text-ink hover:border-accent'
+                            : 'border-line bg-surface text-ink hover:border-line hover:bg-surface-2'
                         }`}
                       >
                         <span className="tracking-tight">{wordObj.word}</span>
-                        <span className="text-[10px] font-mono tabular-nums text-slate-400 group-hover:text-cyan-300">
+                        <span className="text-[10px] font-mono tabular-nums text-ink-muted group-hover:text-ink">
                           {wordObj.start_time.toFixed(1)}s
                         </span>
                       </button>
@@ -993,16 +993,16 @@ export default function TranscriptEditor({
                       {isWordSelected && (
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="mt-2 p-3.5 rounded-xl border border-cyan-500/50 bg-slate-950/95 backdrop-blur-xl shadow-2xl shadow-black/80 z-40 w-72 sm:w-80 space-y-3"
+                          className="mt-2 p-3.5 rounded-xl border border-accent bg-canvas shadow-lg z-40 w-72 sm:w-80 space-y-3"
                         >
-                          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                            <span className="text-[11px] font-mono font-semibold text-cyan-300 uppercase tracking-wider">
+                          <div className="flex items-center justify-between border-b border-line pb-2">
+                            <span className="text-[11px] font-mono font-semibold text-ink uppercase tracking-wider">
                               Edit Word Chip #{wordIdx + 1}
                             </span>
                             <button
                               type="button"
                               onClick={() => setActiveWordCoords(null)}
-                              className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+                              className="text-ink-muted hover:text-ink p-0.5 rounded cursor-pointer"
                             >
                               <X className="w-3.5 h-3.5" />
                             </button>
@@ -1010,7 +1010,7 @@ export default function TranscriptEditor({
 
                           {/* Word Text Input */}
                           <div className="space-y-1">
-                            <label className="text-[10px] font-mono uppercase text-slate-400">
+                            <label className="text-[10px] font-mono uppercase text-ink-muted">
                               Spoken Word / Caption Text
                             </label>
                             <input
@@ -1024,13 +1024,13 @@ export default function TranscriptEditor({
                                 }
                               }}
                               autoFocus
-                              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                              className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
                             />
                           </div>
 
                           {/* Quick Viral Emoji Picker (💰, 🔥, 🚀, etc.) */}
                           <div className="space-y-1">
-                            <label className="text-[10px] font-mono uppercase text-slate-400">
+                            <label className="text-[10px] font-mono uppercase text-ink-muted">
                               Insert Viral Emoji
                             </label>
                             <div className="flex flex-wrap items-center gap-1">
@@ -1042,7 +1042,7 @@ export default function TranscriptEditor({
                                     handleAppendEmojiToDraft(item.emoji)
                                   }
                                   title={`Insert ${item.label} (${item.emoji})`}
-                                  className="px-2 py-1 rounded-md border border-slate-800 bg-slate-900 hover:bg-slate-800 hover:border-cyan-500/40 text-sm transition-colors cursor-pointer"
+                                  className="px-2 py-1 rounded-md border border-line bg-surface hover:bg-surface-2 hover:border-accent text-sm transition-colors cursor-pointer"
                                 >
                                   {item.emoji}
                                 </button>
@@ -1052,8 +1052,8 @@ export default function TranscriptEditor({
 
                           {/* Word Start / End Timestamp Controls (±0.05s / ±0.1s) */}
                           <div className="grid grid-cols-2 gap-2 pt-1">
-                            <div className="rounded-lg border border-slate-800 bg-slate-900/90 p-2 space-y-1">
-                              <span className="text-[10px] font-mono text-slate-400 block">
+                            <div className="rounded-lg border border-line bg-surface p-2 space-y-1">
+                              <span className="text-[10px] font-mono text-ink-muted block">
                                 Word Start (s)
                               </span>
                               <div className="flex items-center justify-between gap-1">
@@ -1064,11 +1064,11 @@ export default function TranscriptEditor({
                                       Math.max(0, Number((v - 0.1).toFixed(2)))
                                     )
                                   }
-                                  className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                                  className="p-1 rounded bg-surface-2 hover:bg-surface-2 text-ink cursor-pointer"
                                 >
                                   <Minus className="w-3 h-3" />
                                 </button>
-                                <span className="text-xs font-mono font-semibold text-cyan-300 tabular-nums">
+                                <span className="text-xs font-mono font-semibold text-ink tabular-nums">
                                   {draftWordStart.toFixed(2)}s
                                 </span>
                                 <button
@@ -1081,15 +1081,15 @@ export default function TranscriptEditor({
                                       )
                                     )
                                   }
-                                  className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                                  className="p-1 rounded bg-surface-2 hover:bg-surface-2 text-ink cursor-pointer"
                                 >
                                   <Plus className="w-3 h-3" />
                                 </button>
                               </div>
                             </div>
 
-                            <div className="rounded-lg border border-slate-800 bg-slate-900/90 p-2 space-y-1">
-                              <span className="text-[10px] font-mono text-slate-400 block">
+                            <div className="rounded-lg border border-line bg-surface p-2 space-y-1">
+                              <span className="text-[10px] font-mono text-ink-muted block">
                                 Word End (s)
                               </span>
                               <div className="flex items-center justify-between gap-1">
@@ -1103,11 +1103,11 @@ export default function TranscriptEditor({
                                       )
                                     )
                                   }
-                                  className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                                  className="p-1 rounded bg-surface-2 hover:bg-surface-2 text-ink cursor-pointer"
                                 >
                                   <Minus className="w-3 h-3" />
                                 </button>
-                                <span className="text-xs font-mono font-semibold text-violet-300 tabular-nums">
+                                <span className="text-xs font-mono font-semibold text-ink tabular-nums">
                                   {draftWordEnd.toFixed(2)}s
                                 </span>
                                 <button
@@ -1117,7 +1117,7 @@ export default function TranscriptEditor({
                                       Number((v + 0.1).toFixed(2))
                                     )
                                   }
-                                  className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                                  className="p-1 rounded bg-surface-2 hover:bg-surface-2 text-ink cursor-pointer"
                                 >
                                   <Plus className="w-3 h-3" />
                                 </button>
@@ -1126,12 +1126,12 @@ export default function TranscriptEditor({
                           </div>
 
                           {/* Popover Footer Actions */}
-                          <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                          <div className="flex items-center justify-between pt-2 border-t border-line">
                             <button
                               type="button"
                               onClick={handleDeleteWord}
                               disabled={(line.words?.length || 0) <= 1}
-                              className="inline-flex items-center gap-1 text-[11px] font-mono text-rose-400 hover:text-rose-300 disabled:opacity-40 cursor-pointer"
+                              className="inline-flex items-center gap-1 text-[11px] font-mono text-danger hover:text-danger disabled:opacity-40 cursor-pointer"
                             >
                               <Trash2 className="w-3 h-3" />
                               <span>Remove</span>

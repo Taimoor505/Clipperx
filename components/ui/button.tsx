@@ -3,19 +3,19 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:pointer-events-none disabled:opacity-50 cursor-pointer shrink-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50 cursor-pointer shrink-0',
   {
     variants: {
       variant: {
         default:
-          'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-sm hover:from-violet-500 hover:to-cyan-400',
+          'bg-accent text-on-accent shadow-sm ',
         secondary:
-          'bg-slate-900 text-slate-100 border border-slate-800 hover:bg-slate-800 hover:border-slate-700',
+          'bg-surface text-ink border border-line hover:bg-surface-2 hover:border-line',
         outline:
-          'border border-slate-800 bg-slate-950/60 text-slate-300 hover:bg-slate-900 hover:text-white hover:border-slate-700',
-        ghost: 'text-slate-400 hover:bg-slate-900 hover:text-slate-100',
+          'border border-line bg-canvas text-ink hover:bg-surface hover:text-ink hover:border-line',
+        ghost: 'text-ink-muted hover:bg-surface hover:text-ink',
         emerald:
-          'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25',
+          'bg-success/10 text-success border border-success/40 hover:bg-success/10',
       },
       size: {
         default: 'h-9 px-4 py-2',

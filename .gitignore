@@ -15,3 +15,14 @@ __pycache__/
 # Local tooling and session logs
 .claude-logs/
 *.tsbuildinfo
+
+# Desktop app build output
+desktop/web/
+/.next-desktop/
+desktop/.venv/
+desktop/build/
+desktop/dist/
+*.spec
+public/__clipperx_test.mp4
+desktop/models/
+desktop/bin/
