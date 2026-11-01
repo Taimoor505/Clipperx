@@ -6,9 +6,11 @@ timestamps rather than model guesses, and the LLM only reads a compact transcrip
 (~15k tokens per hour of video) instead of the video itself.
 """
 
+import hashlib
 import json
 import os
 import subprocess
+import time
 import wave
 from pathlib import Path
 from typing import List, Optional
@@ -17,6 +19,7 @@ import httpx
 import numpy as np
 
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "small")
+WHISPER_BATCH = int(os.environ.get("WHISPER_BATCH", "8"))
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4.1-flash")
 
@@ -43,12 +46,17 @@ class PipelineError(RuntimeError):
 
 
 def _get_whisper():
-    # Loaded lazily: the first call downloads the model into HF_HOME (cached on a volume)
+    # Loaded lazily: the first call downloads the model into HF_HOME (cached on a volume).
+    # Batched inference transcribes several voice chunks at once and every core is used;
+    # together that's several times faster than one chunk on four threads (the default).
     global _whisper
     if _whisper is None:
-        from faster_whisper import WhisperModel
+        from faster_whisper import BatchedInferencePipeline, WhisperModel
 
-        _whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
+        model = WhisperModel(
+            WHISPER_MODEL, device="cpu", compute_type="int8", cpu_threads=os.cpu_count() or 4
+        )
+        _whisper = BatchedInferencePipeline(model=model)
     return _whisper
 
 
@@ -74,7 +82,7 @@ def transcribe(video_path: Path, workdir: Path) -> List[dict]:
     samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
 
     segments, _info = _get_whisper().transcribe(
-        samples, word_timestamps=True, vad_filter=True
+        samples, word_timestamps=True, vad_filter=True, batch_size=WHISPER_BATCH
     )
     result = []
     for seg in segments:
@@ -95,6 +103,104 @@ def transcribe(video_path: Path, workdir: Path) -> List[dict]:
     return result
 
 
+def _transcript_dir() -> Path:
+    # Next to the Whisper model on the persistent volume when there is one
+    base = os.environ.get("TRANSCRIPT_CACHE_DIR") or os.path.join(os.environ.get("HF_HOME", "/tmp"), "transcripts")
+    path = Path(base)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _fingerprint(video_path: Path) -> str:
+    """Identifies a video by size plus its first and last 8 MB: fast even for multi-GB files."""
+    chunk = 8 * 1024 * 1024
+    size = video_path.stat().st_size
+    digest = hashlib.sha256(str(size).encode())
+    with video_path.open("rb") as f:
+        digest.update(f.read(chunk))
+        if size > chunk:
+            f.seek(max(chunk, size - chunk))
+            digest.update(f.read(chunk))
+    return digest.hexdigest()[:32]
+
+
+def _transcript_path(video_path: Path) -> Path:
+    return _transcript_dir() / f"{_fingerprint(video_path)}.{WHISPER_MODEL}.json"
+
+
+def cached_transcript(video_path: Path) -> Optional[List[dict]]:
+    """The saved transcript of this exact video, so picking clips again skips Whisper."""
+    try:
+        return json.loads(_transcript_path(video_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def save_transcript(video_path: Path, segments: List[dict]) -> None:
+    try:
+        _transcript_path(video_path).write_text(json.dumps(segments), encoding="utf-8")
+    except OSError:
+        pass  # caching is an optimisation; a failed write must not fail the request
+
+
+SELECT_DEADLINE = float(os.environ.get("CLIP_PICK_TIMEOUT", "180"))
+
+
+def _complete(api_key: str, model_name: str, prompt: str) -> str:
+    """
+    Streams one chat completion and returns its text. A plain request can't enforce a total
+    time limit: OpenRouter sends keep-alive comments while a model thinks, so a read timeout
+    never fires. Streaming lets us stop at SELECT_DEADLINE no matter what.
+    """
+    deadline = time.monotonic() + SELECT_DEADLINE
+    payload = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"},
+        # Picking moments needs judgement, not long chains of reasoning. On an 85-minute podcast
+        # DeepSeek thought for ~19k tokens (229 s) even at effort "low"; with thinking off it
+        # answered in 31 s at a fifth of the cost. Models without reasoning ignore this.
+        "reasoning": {"enabled": False},
+        "stream": True,
+    }
+    parts: List[str] = []
+    try:
+        with httpx.stream(
+            "POST", OPENROUTER_URL, json=payload, timeout=httpx.Timeout(30.0, read=60.0),
+            headers={"Authorization": f"Bearer {api_key}", "X-Title": "ClipperX"},
+        ) as response:
+            if response.status_code != 200:
+                body = response.read().decode("utf-8", "replace")
+                try:
+                    body = json.loads(body).get("error", {}).get("message") or body
+                except ValueError:
+                    pass
+                raise PipelineError(f"OpenRouter error ({model_name}): {str(body)[:300]}")
+            for line in response.iter_lines():
+                if time.monotonic() > deadline:
+                    raise PipelineError(
+                        f"{model_name} took over {int(SELECT_DEADLINE)} s to pick clips. "
+                        "Try again, or choose a faster clip-picking model."
+                    )
+                if not line.startswith("data: "):
+                    continue  # ": OPENROUTER PROCESSING" keep-alives and blank lines
+                data = line[6:]
+                if data == "[DONE]":
+                    break
+                chunk = json.loads(data)
+                if "error" in chunk:
+                    raise PipelineError(f"OpenRouter error ({model_name}): {chunk['error'].get('message')}")
+                delta = (chunk.get("choices") or [{}])[0].get("delta") or {}
+                parts.append(delta.get("content") or "")
+    except httpx.HTTPError as exc:
+        raise PipelineError(f"Could not reach OpenRouter: {exc}")
+    text = "".join(parts)
+    if not text.strip():
+        raise PipelineError(f"{model_name} sent back an empty answer. Try again, or pick another model.")
+    return text
+
+
 def select_clips(segments: List[dict], max_clips: int, model: Optional[str]) -> List[dict]:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
@@ -105,27 +211,7 @@ def select_clips(segments: List[dict], max_clips: int, model: Optional[str]) -> 
         "{transcript}", transcript
     )
     model_name = model or DEFAULT_OPENROUTER_MODEL
-    try:
-        response = httpx.post(
-            OPENROUTER_URL,
-            headers={"Authorization": f"Bearer {api_key}", "X-Title": "ClipperX"},
-            json={
-                "model": model_name,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.2,
-                "response_format": {"type": "json_object"},
-            },
-            timeout=300,
-        )
-    except httpx.HTTPError as exc:
-        raise PipelineError(f"Could not reach OpenRouter: {exc}")
-
-    data = response.json() if response.content else {}
-    if response.status_code != 200 or "error" in data:
-        message = (data.get("error") or {}).get("message") or response.text[:300]
-        raise PipelineError(f"OpenRouter error ({model_name}): {message}")
-
-    content = data["choices"][0]["message"].get("content") or ""
+    content = _complete(api_key, model_name, prompt)
     # Some models wrap JSON in prose or code fences; take the outermost object
     start, end = content.find("{"), content.rfind("}")
     try:

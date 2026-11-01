@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from vidgrab import DownloadManager
 from vidgrab.server import build_router as build_download_router
 
-from app import transcript_pipeline
+from app import reframe, transcript_pipeline
 
 app = FastAPI(
     title="ClipperX FastAPI + FFmpeg Worker",
@@ -284,8 +284,17 @@ def generate_ass_subtitles(
     transcript_lines: List[TranscriptLineModel],
     output_ass_path: Path,
     preset: str = "Hormozi Pop",
+    width: int = 1080,
+    height: int = 1920,
+    margin_v: int = 480,
 ) -> None:
-    """Writes an Advanced SubStation Alpha (.ASS) subtitle file with word-level \\k karaoke tags."""
+    """
+    Writes an Advanced SubStation Alpha (.ASS) subtitle file with word-level \\k karaoke tags.
+    `margin_v` is the distance from the bottom edge, so captions can sit above a footer banner.
+    """
+    font_size = round(72 * min(width, height) / 1080)
+    outline = max(3, round(5 * min(width, height) / 1080))
+    side = round(width * 0.055)
     primary_color = "&H0000FFFF"  # Neon Yellow in ASS BGR
     if preset == "Cyber Neon":
         primary_color = "&H00FFFF00"  # Cyan in ASS BGR
@@ -294,14 +303,14 @@ def generate_ass_subtitles(
 
     header = f"""[Script Info]
 ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
+PlayResX: {width}
+PlayResY: {height}
 WrapStyle: 0
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Impact,72,{primary_color},&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,2,2,60,60,480,1
+Style: Default,Impact,{font_size},{primary_color},&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,{outline},2,2,{side},{side},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -438,7 +447,11 @@ def analyze_with_transcript(
     workdir = Path(tempfile.mkdtemp(prefix="clipperx_transcribe_"))
     try:
         started = time.time()
-        segments = transcript_pipeline.transcribe(stored_path, workdir)
+        segments = transcript_pipeline.cached_transcript(stored_path)
+        transcript_reused = segments is not None
+        if segments is None:
+            segments = transcript_pipeline.transcribe(stored_path, workdir)
+            transcript_pipeline.save_transcript(stored_path, segments)
         transcribe_seconds = time.time() - started
         if not segments:
             raise HTTPException(status_code=422, detail="No speech was found in this video.")
@@ -460,6 +473,7 @@ def analyze_with_transcript(
         "duration_seconds": duration,
         "timings": {
             "transcribe_seconds": round(transcribe_seconds, 1),
+            "transcript_reused": transcript_reused,
             "select_seconds": round(select_seconds, 1),
         },
     }
@@ -561,6 +575,37 @@ async def analyze_video(payload: AnalyzeRequest):
     return JSONResponse(content={"clips": clips, "model": model_name})
 
 
+# Output canvases per aspect ratio
+CANVAS_SIZES = {"9:16": (1080, 1920), "4:5": (1080, 1350), "1:1": (1080, 1080), "16:9": (1920, 1080)}
+IMAGE_TYPES = (".png", ".jpg", ".jpeg", ".webp")
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+LOGO_CORNERS = ("top-left", "top-right", "bottom-left", "bottom-right")
+
+
+def even(value: float) -> int:
+    return max(2, int(round(value / 2)) * 2)
+
+
+def store_image(upload: Optional[UploadFile], workdir: Path, name: str) -> Optional[Path]:
+    """Saves a banner/logo upload; returns its path, or None when nothing was sent."""
+    if upload is None or not upload.filename:
+        return None
+    suffix = Path(upload.filename).suffix.lower()
+    if suffix not in IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail=f"{name.title()} must be a PNG, JPG or WebP image.")
+    path = workdir / f"{name}{suffix}"
+    with path.open("wb") as f:
+        shutil.copyfileobj(upload.file, f)
+    if path.stat().st_size > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail=f"{name.title()} image is over 10 MB.")
+    return path
+
+
+def fit_inside(src_w: int, src_h: int, box_w: int, box_h: int) -> tuple:
+    scale = min(box_w / src_w, box_h / src_h)
+    return even(src_w * scale), even(src_h * scale)
+
+
 @app.post("/api/render")
 def render_vertical_short(
     video: Optional[UploadFile] = File(None),
@@ -571,14 +616,33 @@ def render_vertical_short(
     dynamic_zoom: bool = Form(True),
     caption_preset: str = Form("Hormozi Pop"),
     transcript_json: str = Form("[]"),
+    aspect_ratio: str = Form("9:16"),
+    framing: str = Form("auto"),  # auto | speaker | fit
+    banner: Optional[UploadFile] = File(None),
+    banner_position: str = Form("bottom"),  # bottom | top
+    logo: Optional[UploadFile] = File(None),
+    logo_position: str = Form("top-right"),
+    logo_size: float = Form(0.16),  # share of the canvas width
+    logo_opacity: float = Form(0.9),
 ):
     """
-    Executes the FFmpeg 9:16 Dual-Layer Blur Fill + Dynamic Zoom + .ASS Subtitle Burn-In pipeline.
+    Renders one clip in a single FFmpeg pass:
+    - framing: "speaker" crops a full-height shot that follows whoever is talking; "fit" shows
+      the whole frame over a blurred copy; "auto" picks speaker crop when the clip is mostly
+      people on camera
+    - optional campaign banner as a header/footer (the video area shrinks to make room)
+    - optional logo/watermark in a corner, and karaoke captions above any footer
     """
+    if aspect_ratio not in CANVAS_SIZES:
+        raise HTTPException(status_code=400, detail=f"aspect_ratio must be one of {', '.join(CANVAS_SIZES)}.")
+    if framing not in ("auto", "speaker", "fit"):
+        raise HTTPException(status_code=400, detail="framing must be auto, speaker or fit.")
+    if banner_position not in ("bottom", "top") or logo_position not in LOGO_CORNERS:
+        raise HTTPException(status_code=400, detail="Unknown banner or logo position.")
+
     workdir = Path(tempfile.mkdtemp(prefix="clipperx_render_"))
-    raw_cut_path = workdir / "output_raw.mp4"
     ass_path = workdir / "clip.ass"
-    final_path = workdir / "short_1080x1920.mp4"
+    final_path = workdir / "short.mp4"
 
     if video_id:
         if not VIDEO_ID_PATTERN.match(video_id) or not (UPLOAD_DIR / video_id).exists():
@@ -591,69 +655,93 @@ def render_vertical_short(
     else:
         raise HTTPException(status_code=400, detail="Provide either `video` or `video_id`.")
 
-    # 1. Timestamp Extraction & Cutting
-    cut_cmd = [
-        "ffmpeg",
-        "-y",
-        "-ss",
-        start_time,
-        "-to",
-        end_time,
-        "-i",
-        str(input_path),
-        "-c:v",
-        "libx264",
-        "-c:a",
-        "aac",
-        str(raw_cut_path),
-    ]
-    run_ffmpeg(cut_cmd)
+    banner_path = store_image(banner, workdir, "banner")
+    logo_path = store_image(logo, workdir, "logo")
+    W, H = CANVAS_SIZES[aspect_ratio]
+    src_w, src_h, src_fps = probe_video_stream(input_path)
 
-    # 2. 9:16 Vertical Formatting (Dual-Layer Blur Fill) + Optional 1.12x Zoom + .ASS Subtitles
-    if dynamic_zoom:
-        # zoompan needs an explicit size and frame rate; its defaults (hd720-ish, 25 fps)
-        # distort non-16:9 sources and stretch 30/60 fps clips out of audio sync
-        src_w, src_h, src_fps = probe_video_stream(raw_cut_path)
-        fg_h = max(2, round(1080 * src_h / src_w / 2) * 2)
-        fg_scale = (
-            f"scale=1080:{fg_h},zoompan=z='if(mod(floor(time/4.5),2),1.12,1.0)':d=1"
-            f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x{fg_h}:fps={src_fps}"
+    # Banner: full canvas width, at most 30% of the height; the video gets what's left
+    BH = 0
+    if banner_path:
+        b_w, b_h, _ = probe_video_stream(banner_path)
+        BH = min(even(W * b_h / b_w), even(H * 0.3))
+    AW, AH = W, H - BH
+
+    inputs = ["-ss", start_time, "-to", end_time, "-i", str(input_path)]
+    filters = []
+
+    plan = None
+    if framing != "fit":
+        plan = reframe.plan(
+            input_path, start_time, end_time, src_w, src_h,
+            out_aspect=AW / AH, force=(framing == "speaker"),
         )
+    if plan:
+        filters.append(f"[0:v]{reframe.crop_filter(plan, src_h, AW, AH)}[content]")
+        layout = "speaker"
     else:
-        fg_scale = "scale=1080:-2"
+        fg_w, fg_h = fit_inside(src_w, src_h, AW, AH)
+        if dynamic_zoom:
+            # zoompan needs explicit size and fps, or it distorts and drifts out of audio sync
+            fg = (f"scale={fg_w}:{fg_h},zoompan=z='if(mod(floor(time/4.5),2),1.12,1.0)':d=1"
+                  f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={fg_w}x{fg_h}:fps={src_fps}")
+        else:
+            fg = f"scale={fg_w}:{fg_h}"
+        # Blur at quarter size and scale up: looks the same, a fraction of the work
+        bw, bh = even(AW / 4), even(AH / 4)
+        filters += [
+            "[0:v]split[a][b]",
+            f"[a]scale={bw}:{bh}:force_original_aspect_ratio=increase,crop={bw}:{bh},"
+            f"boxblur=8:2,scale={AW}:{AH},setsar=1[bg]",
+            f"[b]{fg},setsar=1[fg]",
+            "[bg][fg]overlay=(W-w)/2:(H-h)/2[content]",
+        ]
+        layout = "fit"
 
-    vf_chain = (
-        "split[a][b];"
-        "[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];"
-        f"[b]{fg_scale}[fg];"
-        "[bg][fg]overlay=(W-w)/2:(H-h)/2"
-    )
+    canvas = "content"
+    next_input = 1
+    if banner_path:
+        inputs += ["-loop", "1", "-i", str(banner_path)]
+        filters.append(
+            f"[{next_input}:v]scale={W}:{BH}:force_original_aspect_ratio=decrease,"
+            f"pad={W}:{BH}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[banner]"
+        )
+        order = "[banner][content]" if banner_position == "top" else "[content][banner]"
+        filters.append(f"{order}vstack=inputs=2:shortest=1[withbanner]")
+        canvas = "withbanner"
+        next_input += 1
+
+    if logo_path:
+        inputs += ["-loop", "1", "-i", str(logo_path)]
+        lw = even(W * min(max(logo_size, 0.04), 0.5))
+        opacity = min(max(logo_opacity, 0.05), 1.0)
+        margin = round(W * 0.04)
+        # Keep the logo inside the video area, clear of a header/footer banner
+        top = margin + (BH if banner_path and banner_position == "top" else 0)
+        bottom = f"H-h-{margin + (BH if banner_path and banner_position == 'bottom' else 0)}"
+        x = str(margin) if logo_position.endswith("left") else f"W-w-{margin}"
+        y = str(top) if logo_position.startswith("top") else bottom
+        filters.append(f"[{next_input}:v]scale={lw}:-1,format=rgba,colorchannelmixer=aa={opacity}[logo]")
+        filters.append(f"[{canvas}][logo]overlay={x}:{y}:shortest=1[withlogo]")
+        canvas = "withlogo"
 
     if burn_captions:
-        raw_lines = json.loads(transcript_json)
-        parsed_lines = [TranscriptLineModel(**item) for item in raw_lines]
+        parsed_lines = [TranscriptLineModel(**item) for item in json.loads(transcript_json)]
         if parsed_lines:
-            generate_ass_subtitles(parsed_lines, ass_path, preset=caption_preset)
+            # Lower third of the video area, above a footer banner when there is one
+            margin_v = round(AH * 0.22) + (BH if banner_position == "bottom" else 0)
+            generate_ass_subtitles(parsed_lines, ass_path, preset=caption_preset,
+                                   width=W, height=H, margin_v=margin_v)
             # Relative name (FFmpeg runs in workdir) avoids filter-escaping drive letters like C:
-            vf_chain += f",subtitles={ass_path.name}"
+            filters.append(f"[{canvas}]subtitles={ass_path.name}[out]")
+            canvas = "out"
 
     render_cmd = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        str(raw_cut_path),
-        "-vf",
-        vf_chain,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "fast",
-        "-crf",
-        "18",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "192k",
+        "ffmpeg", "-y", *inputs,
+        "-filter_complex", ";".join(filters),
+        "-map", f"[{canvas}]", "-map", "0:a?",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart",
         str(final_path),
     ]
     run_ffmpeg(render_cmd, cwd=workdir)
@@ -661,6 +749,7 @@ def render_vertical_short(
     return FileResponse(
         path=str(final_path),
         media_type="video/mp4",
-        filename="clipperx_short_1080x1920.mp4",
+        filename=f"clipperx_short_{W}x{H}.mp4",
+        headers={"X-ClipperX-Layout": layout},
         background=BackgroundTask(shutil.rmtree, workdir, ignore_errors=True),
     )
