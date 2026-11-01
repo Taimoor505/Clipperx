@@ -52,6 +52,11 @@ export interface ViralClipSegment {
   hook_transcript: string;
   reasoning: string;
   transcript_lines: TranscriptLine[];
+  /** Model suggestions: where a real photo/video would illustrate the clip (offsets in s) */
+  broll_ideas?: { at: number; show: string }[];
+  /** The AI's original range, kept once the clip is trimmed: captions are timed against it */
+  origin_start?: string;
+  origin_end?: string;
 }
 
 export interface VerticalShortPlayerProps {

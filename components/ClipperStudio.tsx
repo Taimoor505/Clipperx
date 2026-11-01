@@ -22,6 +22,8 @@ import {
   Share2,
   Code2,
   MoreHorizontal,
+  Image as ImageIcon,
+  Trash2,
 } from 'lucide-react';
 import {
   ViralClipSegment,
@@ -32,6 +34,14 @@ import {
 import TranscriptEditor from './TranscriptEditor';
 import CaptionStylePicker from './CaptionStylePicker';
 import ViralityInsightsModal from './ViralityInsightsModal';
+import {
+  CampaignOptions,
+  CampaignSettingsSections,
+  DEFAULT_CAMPAIGN_OPTIONS,
+  PostCaptionPanel,
+  PresetBar,
+  appendCampaignOptions,
+} from './CampaignSettings';
 import {
   STREAMLIT_APP_PY_CODE,
   detectContextualEmojis,
@@ -49,6 +59,8 @@ type ActiveModalType =
   | 'audio'
   | 'publish'
   | 'settings'
+  | 'broll'
+  | 'post'
   | null;
 
 const INITIAL_DEMO_CLIPS: ViralClipSegment[] = [
@@ -208,13 +220,18 @@ type ExportLayout = {
   framing: 'auto' | 'speaker' | 'fit';
   bannerDataUrl: string | null;
   bannerName: string;
-  bannerPosition: 'bottom' | 'top';
+  bannerPosition: 'bottom' | 'top' | 'background';
   logoDataUrl: string | null;
   logoName: string;
   logoPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   logoSize: number; // share of canvas width
   logoOpacity: number;
-};
+  hookLine: boolean; // clip title as a boxed line at the top for the first 3 seconds
+  terms: string; // names/brands: steer Whisper's spelling and get highlighted in captions
+} & CampaignOptions;
+
+/** A user-supplied image or video cut in over a clip at `start` seconds. */
+type BrollInsert = { id: string; file: File; start: number; duration: number; mode: 'full' | 'pip' };
 
 const DEFAULT_EXPORT_LAYOUT: ExportLayout = {
   aspectRatio: '9:16',
@@ -227,6 +244,9 @@ const DEFAULT_EXPORT_LAYOUT: ExportLayout = {
   logoPosition: 'top-right',
   logoSize: 0.16,
   logoOpacity: 0.9,
+  hookLine: true,
+  terms: '',
+  ...DEFAULT_CAMPAIGN_OPTIONS,
 };
 
 const EXPORT_LAYOUT_KEY = 'clipperx.exportLayout';
@@ -270,6 +290,7 @@ function readImageFile(file: File): Promise<string> {
 /** Adds the export layout fields (and banner/logo images) to a /api/render request. */
 async function appendExportLayout(form: FormData, layout: ExportLayout): Promise<void> {
   form.append('aspect_ratio', layout.aspectRatio);
+  form.append('highlight_terms', layout.terms);
   form.append('framing', layout.framing);
   if (layout.bannerDataUrl) {
     form.append('banner', await dataUrlToBlob(layout.bannerDataUrl), layout.bannerName || 'banner.png');
@@ -341,6 +362,7 @@ type DesktopInfo = {
 };
 
 type RenderOptions = {
+  broll: BrollInsert[];
   burnInCaptions: boolean;
   dynamicZoom: boolean;
   captionPreset: CaptionPresetName;
@@ -363,13 +385,25 @@ async function renderAndSaveClip(
 ): Promise<string | null> {
   const form = new FormData();
   form.append('video_id', sourceVideoId);
-  form.append('start_time', clip.start_time);
-  form.append('end_time', clip.end_time);
+  // Captions are timed against the AI's original range; a trim is sent as offsets from it
+  const originStart = clip.origin_start ?? clip.start_time;
+  const originEnd = clip.origin_end ?? clip.end_time;
+  form.append('start_time', originStart);
+  form.append('end_time', originEnd);
+  form.append('trim_start', String(timestampToSeconds(clip.start_time) - timestampToSeconds(originStart)));
+  form.append('trim_end', String(timestampToSeconds(clip.end_time) - timestampToSeconds(originEnd)));
   form.append('burn_captions', String(options.burnInCaptions));
   form.append('dynamic_zoom', String(options.dynamicZoom));
   form.append('caption_preset', options.captionPreset);
   form.append('transcript_json', JSON.stringify(clip.transcript_lines ?? []));
   await appendExportLayout(form, options.exportLayout);
+  appendCampaignOptions(form, options.exportLayout, clip.title);
+  if (options.exportLayout.hookLine) form.append('hook_text', clip.title);
+  for (const insert of options.broll) form.append('broll', insert.file, insert.file.name);
+  form.append(
+    'broll_json',
+    JSON.stringify(options.broll.map(({ start, duration, mode }) => ({ start, duration, mode })))
+  );
   if (IS_DESKTOP) {
     form.append('save', 'true');
     form.append('filename', clipFileName(clip));
@@ -429,6 +463,7 @@ interface MinimalVerticalClipCardProps {
   videoFileUrl: string | null;
   sourceVideoId: string | null;
   exportLayout: ExportLayout;
+  broll: BrollInsert[];
   captionPreset: CaptionPresetName;
   burnInCaptions: boolean;
   dynamicZoom: boolean;
@@ -444,6 +479,7 @@ function MinimalVerticalClipCard({
   clip,
   videoFileUrl,
   exportLayout,
+  broll,
   sourceVideoId,
   captionPreset,
   burnInCaptions,
@@ -727,6 +763,7 @@ function MinimalVerticalClipCard({
     setIsDownloading(true);
     try {
       const savedTo = await renderAndSaveClip(clip, sourceVideoId, {
+        broll,
         burnInCaptions,
         dynamicZoom,
         captionPreset,
@@ -827,23 +864,35 @@ function MinimalVerticalClipCard({
               {formatClock(timestampToSeconds(clip.start_time))} to{' '}
               {formatClock(timestampToSeconds(clip.end_time))}
             </span>
-            <span className="inline-flex items-center gap-0.5" aria-label="Adjust length">
-              <button
-                type="button"
-                onClick={() => onAdjustTrim('start', -2)}
-                title="Start 2 seconds earlier"
-                className="rounded px-1.5 py-0.5 hover:bg-surface-2 hover:text-ink cursor-pointer"
-              >
-                −2s
-              </button>
-              <button
-                type="button"
-                onClick={() => onAdjustTrim('end', 2)}
-                title="End 2 seconds later"
-                className="rounded px-1.5 py-0.5 hover:bg-surface-2 hover:text-ink cursor-pointer"
-              >
-                +2s
-              </button>
+            <span className="inline-flex items-center gap-1" aria-label="Adjust length">
+              {(
+                [
+                  ['start', 'Start'],
+                  ['end', 'End'],
+                ] as const
+              ).map(([edge, name]) => (
+                <span key={edge} className="inline-flex items-center rounded-md border border-line">
+                  <button
+                    type="button"
+                    onClick={() => onAdjustTrim(edge, -2)}
+                    title={`${name} 2 seconds earlier`}
+                    aria-label={`${name} 2 seconds earlier`}
+                    className="px-1 py-0.5 hover:bg-surface-2 hover:text-ink cursor-pointer"
+                  >
+                    −
+                  </button>
+                  <span className="px-0.5 text-[10px]">{name}</span>
+                  <button
+                    type="button"
+                    onClick={() => onAdjustTrim(edge, 2)}
+                    title={`${name} 2 seconds later`}
+                    aria-label={`${name} 2 seconds later`}
+                    className="px-1 py-0.5 hover:bg-surface-2 hover:text-ink cursor-pointer"
+                  >
+                    +
+                  </button>
+                </span>
+              ))}
             </span>
           </div>
         </div>
@@ -901,6 +950,8 @@ function MinimalVerticalClipCard({
               >
                 {(
                   [
+                    ['broll', broll.length ? `B-roll (${broll.length})` : 'B-roll', ImageIcon],
+                    ['post', 'Post caption', Share2],
                     ['style', 'Caption style', Palette],
                     ['insights', 'Why this clip', BarChart3],
                   ] as const
@@ -925,6 +976,196 @@ function MinimalVerticalClipCard({
         </div>
       </div>
     </article>
+  );
+}
+
+function BrollPanel({
+  clip,
+  inserts,
+  onChange,
+  onClose,
+}: {
+  clip: ViralClipSegment;
+  inserts: BrollInsert[];
+  onChange: (inserts: BrollInsert[]) => void;
+  onClose: () => void;
+}) {
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [pendingAt, setPendingAt] = useState<number>(0);
+  const length = clip.duration_seconds;
+
+  const addFiles = (files: FileList | null) => {
+    if (!files?.length) return;
+    const added = [...files]
+      .filter((f) => /^(image|video)\//.test(f.type))
+      .map((file, i) => ({
+        id: `${Date.now()}-${i}`,
+        file,
+        start: Math.min(Math.max(0, pendingAt + i * 3), Math.max(0, length - 1)),
+        duration: 2.5,
+        mode: 'full' as const,
+      }));
+    onChange([...inserts, ...added].sort((a, b) => a.start - b.start));
+  };
+  const update = (id: string, changes: Partial<BrollInsert>) =>
+    onChange(inserts.map((x) => (x.id === id ? { ...x, ...changes } : x)));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex justify-end bg-overlay"
+    >
+      <motion.div
+        role="dialog"
+        aria-label="B-roll"
+        initial={{ x: 32, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        exit={{ x: 32, opacity: 0 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
+        onClick={(e) => e.stopPropagation()}
+        className="h-full w-full max-w-md border-l border-line bg-surface overflow-y-auto"
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-5 h-14">
+          <div className="min-w-0">
+            <h3 className="text-[15px] font-semibold">B-roll</h3>
+            <p className="text-xs text-ink-muted truncate">{clip.title}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close B-roll"
+            className="w-8 h-8 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-2 flex items-center justify-center cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-6">
+          <p className="text-sm text-ink-muted">
+            Add your own photos or video over the clip at the moments that need them. Use real
+            footage you&rsquo;re allowed to use, like the brand&rsquo;s own photos or clips you shot.
+          </p>
+
+          {Boolean(clip.broll_ideas?.length) && (
+            <section className="space-y-2">
+              <h4 className="text-xs font-medium text-ink-muted">Suggested moments</h4>
+              <ul className="space-y-1.5">
+                {clip.broll_ideas!.map((idea) => (
+                  <li key={`${idea.at}-${idea.show}`} className="flex items-start gap-3 rounded-lg bg-surface-2 px-3 py-2.5">
+                    <span className="text-xs font-semibold tabular-nums pt-0.5 w-9 shrink-0">
+                      {formatClock(idea.at)}
+                    </span>
+                    <span className="text-sm flex-1">{idea.show}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingAt(idea.at);
+                        fileRef.current?.click();
+                      }}
+                      className="shrink-0 h-7 px-2.5 rounded-md border border-line text-xs font-medium hover:bg-surface cursor-pointer"
+                    >
+                      Add file
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-medium text-ink-muted">
+                In this clip ({formatClock(length)} long)
+              </h4>
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingAt(0);
+                  fileRef.current?.click();
+                }}
+                className="h-8 px-3 rounded-lg border border-line text-sm font-medium hover:bg-surface-2 cursor-pointer flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                Add images or videos
+              </button>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm"
+              className="hidden"
+              onChange={(e) => {
+                addFiles(e.target.files);
+                e.target.value = '';
+              }}
+            />
+            {inserts.length === 0 ? (
+              <p className="text-sm text-ink-subtle py-6 text-center border border-dashed border-line rounded-lg">
+                No B-roll yet.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {inserts.map((x) => (
+                  <li key={x.id} className="rounded-lg border border-line p-3 space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-ink-muted shrink-0" />
+                      <span className="text-sm truncate flex-1">{x.file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => onChange(inserts.filter((y) => y.id !== x.id))}
+                        aria-label={`Remove ${x.file.name}`}
+                        className="w-7 h-7 rounded-md text-ink-muted hover:text-danger hover:bg-surface-2 flex items-center justify-center cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <label className="space-y-1">
+                        <span className="text-ink-muted">Starts at (s)</span>
+                        <input
+                          type="number" min={0} max={Math.max(0, length - 0.5)} step={0.5}
+                          value={x.start}
+                          onChange={(e) => update(x.id, { start: Math.max(0, Number(e.target.value)) })}
+                          className="w-full h-8 px-2 rounded-md bg-canvas border border-line tabular-nums"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-ink-muted">Shows for (s)</span>
+                        <input
+                          type="number" min={0.5} max={15} step={0.5}
+                          value={x.duration}
+                          onChange={(e) => update(x.id, { duration: Math.min(15, Math.max(0.5, Number(e.target.value))) })}
+                          className="w-full h-8 px-2 rounded-md bg-canvas border border-line tabular-nums"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-ink-muted">Style</span>
+                        <select
+                          value={x.mode}
+                          onChange={(e) => update(x.id, { mode: e.target.value as BrollInsert['mode'] })}
+                          className="w-full h-8 px-1.5 rounded-md bg-canvas border border-line"
+                        >
+                          <option value="full">Full screen</option>
+                          <option value="pip">Top panel</option>
+                        </select>
+                      </label>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <p className="text-[11px] text-ink-subtle">
+            Captions and the hook line stay on top of B-roll. B-roll is kept until you close this
+            page.
+          </p>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -1113,6 +1354,8 @@ export default function ClipperStudio() {
   };
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [savedNotice, setSavedNotice] = useState<{ count: number; path: string | null } | null>(null);
+  // B-roll files live in memory only: they belong to this session's clips
+  const [brollByClip, setBrollByClip] = useState<Record<number, BrollInsert[]>>({});
   const [desktopInfo, setDesktopInfo] = useState<DesktopInfo | null>(null);
 
   useEffect(() => {
@@ -1231,6 +1474,9 @@ export default function ClipperStudio() {
         form.append('max_clips', String(maxClips));
         if (useTranscript) {
           form.append('llm_model', llmModel);
+          form.append('vocabulary', exportLayout.terms);
+          form.append('min_seconds', String(exportLayout.minSeconds));
+          form.append('max_seconds', String(exportLayout.maxSeconds));
         } else {
           form.append('selectedModel', selectedModel);
         }
@@ -1342,6 +1588,7 @@ export default function ClipperStudio() {
       setBatchProgress({ done: i, total: queue.length });
       try {
         const savedTo = await renderAndSaveClip(queue[i], sourceVideoId, {
+          broll: brollByClip[queue[i].clip_id] ?? [],
           burnInCaptions,
           dynamicZoom,
           captionPreset,
@@ -1382,12 +1629,14 @@ export default function ClipperStudio() {
         let s = timestampToSeconds(c.start_time);
         let e = timestampToSeconds(c.end_time);
         if (edge === 'start') {
-          s = Math.max(0, Math.min(e - 10, s + deltaSeconds));
+          s = Math.max(0, Math.min(e - 5, s + deltaSeconds));
         } else {
-          e = Math.max(s + 10, e + deltaSeconds);
+          e = Math.max(s + 5, e + deltaSeconds);
         }
         return {
           ...c,
+          origin_start: c.origin_start ?? c.start_time,
+          origin_end: c.origin_end ?? c.end_time,
           start_time: secondsToTimestamp(s),
           end_time: secondsToTimestamp(e),
           duration_seconds: Number((e - s).toFixed(1)),
@@ -1711,6 +1960,7 @@ export default function ClipperStudio() {
                     videoFileUrl={videoFileUrl}
                     sourceVideoId={sourceVideoId}
                     exportLayout={exportLayout}
+                    broll={brollByClip[clip.clip_id] ?? []}
                     captionPreset={captionPreset}
                     burnInCaptions={burnInCaptions}
                     dynamicZoom={dynamicZoom}
@@ -1819,6 +2069,25 @@ export default function ClipperStudio() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {activeModal === 'broll' && activeClip && (
+          <BrollPanel
+            clip={activeClip}
+            inserts={brollByClip[activeClip.clip_id] ?? []}
+            onChange={(inserts) =>
+              setBrollByClip((prev) => ({ ...prev, [activeClip.clip_id]: inserts }))
+            }
+            onClose={() => setActiveModal(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activeModal === 'post' && activeClip && (
+          <PostCaptionPanel clip={activeClip} options={exportLayout} onClose={() => setActiveModal(null)} />
+        )}
+      </AnimatePresence>
+
       {/* 3. 📊 Score Breakdown Modal (`ViralityInsightsModal`) */}
       <ViralityInsightsModal
         clip={activeClip}
@@ -1846,7 +2115,7 @@ export default function ClipperStudio() {
               exit={{ x: 32, opacity: 0 }}
               transition={{ duration: 0.18, ease: 'easeOut' }}
               onClick={(e) => e.stopPropagation()}
-              className="h-full w-full max-w-sm border-l border-line bg-surface overflow-y-auto"
+              className="h-full w-full max-w-md border-l border-line bg-surface overflow-y-auto"
             >
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-5 h-14">
                 <h3 className="text-[15px] font-semibold">Settings</h3>
@@ -1865,6 +2134,35 @@ export default function ClipperStudio() {
                 )}
 
               <div className="space-y-4">
+                <PresetBar
+                  backendUrl={BACKEND_URL}
+                  current={{ layout: exportLayout, captionPreset, burnInCaptions, dynamicZoom }}
+                  onApply={(saved) => {
+                    setExportLayout({ ...DEFAULT_EXPORT_LAYOUT, ...saved.layout });
+                    if (saved.captionPreset) setCaptionPreset(saved.captionPreset);
+                    setBurnInCaptions(saved.burnInCaptions ?? true);
+                    setDynamicZoom(saved.dynamicZoom ?? true);
+                  }}
+                />
+
+                <div className="space-y-1.5">
+                  <label htmlFor="terms" className="text-xs font-medium text-ink block">
+                    Names and terms
+                  </label>
+                  <textarea
+                    id="terms"
+                    rows={2}
+                    value={exportLayout.terms}
+                    onChange={(e) => updateLayout({ terms: e.target.value })}
+                    placeholder="Greg LaVecchia, Bloom Nutrition, Iced Coffee Hour"
+                    className="w-full px-3 py-2 rounded-xl bg-canvas border border-line text-xs text-ink placeholder:text-ink-subtle focus:outline-none focus:border-accent resize-none"
+                  />
+                  <p className="text-[11px] text-ink-subtle">
+                    Spelled correctly in captions and highlighted, along with numbers. Separate with
+                    commas.
+                  </p>
+                </div>
+
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-ink block">
                     Analysis engine
@@ -1995,6 +2293,18 @@ export default function ClipperStudio() {
                       </select>
                     </div>
                   </div>
+                  <label className="flex items-center justify-between gap-3 text-xs text-ink">
+                    <span>
+                      Hook line
+                      <span className="block text-[11px] text-ink-subtle">
+                        The clip&rsquo;s title at the top for the first 3 seconds
+                      </span>
+                    </span>
+                    <Switch
+                      checked={exportLayout.hookLine}
+                      onCheckedChange={(on) => updateLayout({ hookLine: on })}
+                    />
+                  </label>
                   <p className="text-[11px] text-ink-subtle">
                     {exportLayout.framing === 'auto'
                       ? 'People talking: crops onto the speaker. Anything else: fits the whole frame over a blur.'
@@ -2017,6 +2327,7 @@ export default function ClipperStudio() {
                         >
                           <option value="bottom">Footer</option>
                           <option value="top">Header</option>
+                          <option value="background">Behind the video</option>
                         </select>
                         <button
                           type="button"
@@ -2106,6 +2417,12 @@ export default function ClipperStudio() {
                   </div>
                   {layoutError && <p role="alert" className="text-[11px] text-danger">{layoutError}</p>}
                 </div>
+
+                <CampaignSettingsSections
+                  options={exportLayout}
+                  onChange={(changes) => updateLayout(changes)}
+                  backendUrl={BACKEND_URL}
+                />
 
                 <div className="space-y-2.5 pt-1">
                   <div className="flex items-center justify-between rounded-xl bg-canvas px-3.5 py-2.5 border border-line">
