@@ -85,7 +85,7 @@ export default function SocialPublishModal({
       apiLabel: 'TikTok Direct Post API v2',
       handle: '@clipperx.studio',
       avatarInitials: 'TT',
-      avatarGradient: 'from-cyan-400 via-slate-900 to-rose-500',
+      avatarGradient: ' ',
       connected: true,
       enabledForPost: true,
       followers: '148.2K',
@@ -96,7 +96,7 @@ export default function SocialPublishModal({
       apiLabel: 'YouTube Data API v3',
       handle: '@ClipperXOfficial',
       avatarInitials: 'YT',
-      avatarGradient: 'from-rose-500 to-red-700',
+      avatarGradient: ' ',
       connected: true,
       enabledForPost: true,
       followers: '92.4K',
@@ -107,7 +107,7 @@ export default function SocialPublishModal({
       apiLabel: 'IG Graph Reels Container API',
       handle: '@clipperx.ai',
       avatarInitials: 'IG',
-      avatarGradient: 'from-amber-400 via-fuchsia-500 to-violet-600',
+      avatarGradient: ' ',
       connected: true,
       enabledForPost: true,
       followers: '64.9K',
@@ -295,7 +295,7 @@ export default function SocialPublishModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas "
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 14 }}
@@ -303,28 +303,28 @@ export default function SocialPublishModal({
             exit={{ opacity: 0, scale: 0.95, y: 14 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/95 shadow-2xl shadow-black/90 text-slate-100"
+            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border border-line bg-surface shadow-lg text-ink"
           >
             {/* ===============================================================
                 MODAL HEADER
                =============================================================== */}
-            <div className="sticky top-0 z-20 flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-800/90 bg-slate-950/90 backdrop-blur-md">
+            <div className="sticky top-0 z-20 flex items-center justify-between gap-4 px-6 py-4 border-b border-line bg-canvas ">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600/30 to-cyan-500/30 border border-violet-500/40 flex items-center justify-center text-cyan-300 shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-accent border border-accent flex items-center justify-center text-on-accent shrink-0">
                   <Share2 className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white tracking-tight truncate">
+                    <h3 className="text-sm font-bold text-ink tracking-tight truncate">
                       Direct-to-Social Short Publisher
                     </h3>
                     <Badge variant="gradient" className="font-mono text-[10px]">
                       1080×1920 · 60fps
                     </Badge>
                   </div>
-                  <p className="text-xs text-slate-400 truncate mt-0.5">
+                  <p className="text-xs text-ink-muted truncate mt-0.5">
                     Publishing Clip #{clip?.clip_id ?? 1}:{' '}
-                    <span className="text-slate-200 font-medium">
+                    <span className="text-ink font-medium">
                       {clip?.title ||
                         'Why 90% of AI Video Pipelines Fail at Frame Pacing'}
                     </span>
@@ -336,7 +336,7 @@ export default function SocialPublishModal({
                 type="button"
                 onClick={onClose}
                 aria-label="Close Social Publish Modal"
-                className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-white hover:border-slate-700 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg border border-line bg-surface text-ink-muted hover:text-ink hover:border-line transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -348,11 +348,11 @@ export default function SocialPublishModal({
                  ============================================================= */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5 text-ink" />
                     <span>1. Connected Destination Accounts</span>
                   </span>
-                  <span className="text-[11px] font-mono text-slate-400">
+                  <span className="text-[11px] font-mono text-ink-muted">
                     {activePlatforms.length} of {accounts.length} active for
                     distribution
                   </span>
@@ -368,25 +368,25 @@ export default function SocialPublishModal({
                         onClick={() => handleTogglePlatformPost(acc.id)}
                         className={`rounded-xl border p-3.5 transition-all cursor-pointer ${
                           isSelected
-                            ? 'border-violet-500/70 bg-slate-950/90 ring-1 ring-violet-500/30 shadow-md shadow-violet-950/20'
-                            : 'border-slate-800/90 bg-slate-950/50 opacity-75 hover:opacity-100 hover:border-slate-700'
+                            ? 'border-accent bg-canvas ring-1 ring-accent shadow-md '
+                            : 'border-line bg-canvas opacity-75 hover:opacity-100 hover:border-line'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2 mb-2.5">
                           {/* Avatar Preview + Platform Name */}
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div
-                              className={`w-9 h-9 rounded-full bg-gradient-to-br ${acc.avatarGradient} p-0.5 shrink-0 flex items-center justify-center shadow-sm`}
+                              className={`w-9 h-9 rounded-full bg-accent ${acc.avatarGradient} p-0.5 shrink-0 flex items-center justify-center shadow-sm`}
                             >
-                              <div className="w-full h-full rounded-full bg-slate-950/85 flex items-center justify-center text-[11px] font-extrabold font-mono text-white">
+                              <div className="w-full h-full rounded-full bg-canvas flex items-center justify-center text-[11px] font-extrabold font-mono text-ink">
                                 {acc.avatarInitials}
                               </div>
                             </div>
                             <div className="min-w-0">
-                              <div className="text-xs font-bold text-white truncate">
+                              <div className="text-xs font-bold text-ink truncate">
                                 {acc.name}
                               </div>
-                              <div className="text-[11px] font-mono text-slate-400 truncate">
+                              <div className="text-[11px] font-mono text-ink-muted truncate">
                                 {acc.handle}
                               </div>
                             </div>
@@ -401,7 +401,7 @@ export default function SocialPublishModal({
                         </div>
 
                         {/* Connection Status Badge Pill */}
-                        <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[10px] font-mono">
+                        <div className="flex items-center justify-between pt-2 border-t border-line text-[10px] font-mono">
                           <button
                             type="button"
                             onClick={(e) =>
@@ -409,15 +409,15 @@ export default function SocialPublishModal({
                             }
                             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border transition-colors cursor-pointer ${
                               acc.connected
-                                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                                : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                                ? 'border-success/40 bg-success/10 text-success'
+                                : 'border-accent bg-accent-soft text-ink'
                             }`}
                           >
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${
                                 acc.connected
-                                  ? 'bg-emerald-400'
-                                  : 'bg-amber-400'
+                                  ? 'bg-success'
+                                  : 'bg-accent'
                               }`}
                             />
                             <span>
@@ -425,7 +425,7 @@ export default function SocialPublishModal({
                             </span>
                           </button>
 
-                          <span className="text-slate-500">
+                          <span className="text-ink-subtle">
                             {acc.followers}
                           </span>
                         </div>
@@ -442,9 +442,9 @@ export default function SocialPublishModal({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label
                     htmlFor="social-caption-textarea"
-                    className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5"
+                    className="text-xs font-semibold uppercase tracking-wider text-ink flex items-center gap-1.5"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                    <Sparkles className="w-3.5 h-3.5 text-ink" />
                     <span>2. AI Post Description &amp; Viral Hashtags</span>
                   </label>
 
@@ -454,16 +454,16 @@ export default function SocialPublishModal({
                     size="sm"
                     onClick={handleGenerateTrendingHashtags}
                     disabled={isGeneratingTags}
-                    className="h-7 px-2.5 text-xs border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20 text-violet-200 cursor-pointer"
+                    className="h-7 px-2.5 text-xs border-accent bg-accent-soft hover:bg-accent-soft text-ink cursor-pointer"
                   >
                     {isGeneratingTags ? (
                       <>
-                        <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                        <Loader2 className="w-3 h-3 animate-spin text-ink" />
                         <span>Generating Tags...</span>
                       </>
                     ) : (
                       <>
-                        <Hash className="w-3 h-3 text-cyan-400" />
+                        <Hash className="w-3 h-3 text-ink" />
                         <span>Generate Trending Hashtags</span>
                       </>
                     )}
@@ -477,11 +477,11 @@ export default function SocialPublishModal({
                     value={captionText}
                     onChange={(e) => setCaptionText(e.target.value)}
                     placeholder="Write your short-form hook description and hashtags..."
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950/90 p-3.5 text-xs text-slate-100 leading-relaxed focus:outline-none focus:border-cyan-400 resize-none"
+                    className="w-full rounded-xl border border-line bg-canvas p-3.5 text-xs text-ink leading-relaxed focus:outline-none focus:border-accent resize-none"
                   />
-                  <div className="flex items-center justify-between px-1 pt-1.5 text-[10px] font-mono text-slate-400">
+                  <div className="flex items-center justify-between px-1 pt-1.5 text-[10px] font-mono text-ink-muted">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-slate-500">Quick append:</span>
+                      <span className="text-ink-subtle">Quick append:</span>
                       {[
                         '#shorts',
                         '#viral',
@@ -494,7 +494,7 @@ export default function SocialPublishModal({
                           key={tag}
                           type="button"
                           onClick={() => handleInsertSingleTag(tag)}
-                          className="px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-800 text-cyan-300 border border-slate-700/70 transition-colors cursor-pointer"
+                          className="px-1.5 py-0.5 rounded bg-surface-2 hover:bg-surface-2 text-ink border border-line transition-colors cursor-pointer"
                         >
                           {tag}
                         </button>
@@ -510,9 +510,9 @@ export default function SocialPublishModal({
               {/* =============================================================
                   3. PUBLISHING CONTROLS (Immediate vs Schedule + Date/Time Picker)
                  ============================================================= */}
-              <div className="space-y-3 pt-2 border-t border-slate-800/80">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              <div className="space-y-3 pt-2 border-t border-line">
+                <span className="text-xs font-semibold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-success" />
                   <span>3. Release Schedule &amp; Distribution Timing</span>
                 </span>
 
@@ -522,8 +522,8 @@ export default function SocialPublishModal({
                     onClick={() => setPublishMode('immediate')}
                     className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
                       publishMode === 'immediate'
-                        ? 'border-cyan-500/70 bg-cyan-950/15 ring-1 ring-cyan-500/30'
-                        : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
+                        ? 'border-accent bg-accent-soft ring-1 ring-accent'
+                        : 'border-line bg-canvas hover:border-line'
                     }`}
                   >
                     <input
@@ -535,10 +535,10 @@ export default function SocialPublishModal({
                       className="mt-0.5 accent-cyan-400 cursor-pointer"
                     />
                     <div>
-                      <div className="text-xs font-bold text-white">
+                      <div className="text-xs font-bold text-ink">
                         Publish Immediately
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="text-[11px] text-ink-muted mt-0.5">
                         Push 9:16 vertical short live to all selected platforms
                         right now.
                       </p>
@@ -549,8 +549,8 @@ export default function SocialPublishModal({
                     onClick={() => setPublishMode('scheduled')}
                     className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
                       publishMode === 'scheduled'
-                        ? 'border-violet-500/70 bg-violet-950/15 ring-1 ring-violet-500/30'
-                        : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
+                        ? 'border-accent bg-accent-soft ring-1 ring-accent'
+                        : 'border-line bg-canvas hover:border-line'
                     }`}
                   >
                     <input
@@ -562,10 +562,10 @@ export default function SocialPublishModal({
                       className="mt-0.5 accent-violet-400 cursor-pointer"
                     />
                     <div>
-                      <div className="text-xs font-bold text-white">
+                      <div className="text-xs font-bold text-ink">
                         Schedule for Later
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="text-[11px] text-ink-muted mt-0.5">
                         Queue post for peak audience engagement window across
                         platforms.
                       </p>
@@ -575,13 +575,13 @@ export default function SocialPublishModal({
 
                 {/* Date and Time Picker Input when Scheduled is active */}
                 {publishMode === 'scheduled' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-violet-500/30 bg-slate-950/80 p-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-accent bg-canvas p-3.5">
                     <div className="space-y-1">
                       <label
                         htmlFor="schedule-date-input"
-                        className="text-[10px] font-mono uppercase text-slate-400 flex items-center gap-1"
+                        className="text-[10px] font-mono uppercase text-ink-muted flex items-center gap-1"
                       >
-                        <Calendar className="w-3 h-3 text-violet-400" />
+                        <Calendar className="w-3 h-3 text-ink" />
                         <span>Target Publish Date</span>
                       </label>
                       <input
@@ -589,16 +589,16 @@ export default function SocialPublishModal({
                         type="date"
                         value={scheduleDate}
                         onChange={(e) => setScheduleDate(e.target.value)}
-                        className="w-full h-9 px-3 rounded-lg border border-slate-800 bg-slate-900 text-xs font-mono text-white focus:outline-none focus:border-violet-400"
+                        className="w-full h-9 px-3 rounded-lg border border-line bg-surface text-xs font-mono text-ink focus:outline-none focus:border-accent"
                       />
                     </div>
 
                     <div className="space-y-1">
                       <label
                         htmlFor="schedule-time-input"
-                        className="text-[10px] font-mono uppercase text-slate-400 flex items-center gap-1"
+                        className="text-[10px] font-mono uppercase text-ink-muted flex items-center gap-1"
                       >
-                        <Clock className="w-3 h-3 text-cyan-400" />
+                        <Clock className="w-3 h-3 text-ink" />
                         <span>Target Publish Time (Local TZ)</span>
                       </label>
                       <input
@@ -606,7 +606,7 @@ export default function SocialPublishModal({
                         type="time"
                         value={scheduleTime}
                         onChange={(e) => setScheduleTime(e.target.value)}
-                        className="w-full h-9 px-3 rounded-lg border border-slate-800 bg-slate-900 text-xs font-mono text-white focus:outline-none focus:border-cyan-400"
+                        className="w-full h-9 px-3 rounded-lg border border-line bg-surface text-xs font-mono text-ink focus:outline-none focus:border-accent"
                       />
                     </div>
                   </div>
@@ -617,12 +617,12 @@ export default function SocialPublishModal({
                   MULTI-PLATFORM API STATUS FEEDBACK TELEMETRY
                  ============================================================= */}
               {(isPublishing || allCompleted) && (
-                <div className="rounded-xl border border-slate-800 bg-slate-950/90 p-4 space-y-3">
+                <div className="rounded-xl border border-line bg-canvas p-4 space-y-3">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-mono font-semibold uppercase tracking-wider text-slate-300">
+                    <span className="font-mono font-semibold uppercase tracking-wider text-ink">
                       Multi-Platform API Dispatch Status
                     </span>
-                    <span className="text-[11px] font-mono text-cyan-300">
+                    <span className="text-[11px] font-mono text-ink">
                       {allCompleted
                         ? publishMode === 'scheduled'
                           ? `Scheduled for ${scheduleDate} @ ${scheduleTime}`
@@ -643,27 +643,27 @@ export default function SocialPublishModal({
                       return (
                         <div
                           key={acc.id}
-                          className="rounded-lg border border-slate-800/90 bg-slate-900/75 p-2.5 space-y-1.5"
+                          className="rounded-lg border border-line bg-surface p-2.5 space-y-1.5"
                         >
                           <div className="flex items-center justify-between text-xs">
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold text-white">
+                              <span className="font-semibold text-ink">
                                 {acc.name}
                               </span>
-                              <span className="text-[10px] font-mono text-slate-400">
+                              <span className="text-[10px] font-mono text-ink-muted">
                                 ({acc.apiLabel})
                               </span>
                             </div>
 
                             <div className="flex items-center gap-1.5 text-[11px] font-mono">
                               {st.state === 'uploading' && (
-                                <span className="text-cyan-300 flex items-center gap-1">
+                                <span className="text-ink flex items-center gap-1">
                                   <Loader2 className="w-3 h-3 animate-spin" />
                                   <span>Uploading 9:16 MP4 ({st.progress}%)</span>
                                 </span>
                               )}
                               {st.state === 'processing' && (
-                                <span className="text-violet-300 flex items-center gap-1">
+                                <span className="text-ink flex items-center gap-1">
                                   <Loader2 className="w-3 h-3 animate-spin" />
                                   <span>
                                     Indexing Captions ({st.progress}%)
@@ -671,8 +671,8 @@ export default function SocialPublishModal({
                                 </span>
                               )}
                               {isDone && (
-                                <span className="text-emerald-300 flex items-center gap-1 font-semibold">
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                <span className="text-success flex items-center gap-1 font-semibold">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                                   <span>
                                     {st.state === 'scheduled'
                                       ? 'Scheduled via API'
@@ -683,13 +683,13 @@ export default function SocialPublishModal({
                             </div>
                           </div>
 
-                          <div className="w-full h-1.5 rounded-full bg-slate-950 overflow-hidden">
+                          <div className="w-full h-1.5 rounded-full bg-canvas overflow-hidden">
                             <div
                               style={{ width: `${st.progress}%` }}
                               className={`h-full transition-all duration-200 ${
                                 isDone
-                                  ? 'bg-emerald-400'
-                                  : 'bg-gradient-to-r from-violet-500 to-cyan-400'
+                                  ? 'bg-success'
+                                  : 'bg-accent '
                               }`}
                             />
                           </div>
@@ -703,16 +703,16 @@ export default function SocialPublishModal({
               {/* =============================================================
                   MODAL FOOTER & "PUBLISH SHORT" PRIMARY ACTION BUTTON
                  ============================================================= */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
-                <div className="text-xs font-mono text-slate-400">
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-line">
+                <div className="text-xs font-mono text-ink-muted">
                   {activePlatforms.length === 0 ? (
-                    <span className="text-amber-400">
+                    <span className="text-ink">
                       Enable at least 1 social account above to publish
                     </span>
                   ) : (
                     <span>
                       Ready for{' '}
-                      <strong className="text-white">
+                      <strong className="text-ink">
                         {activePlatforms.map((p) => p.name).join(', ')}
                       </strong>
                     </span>

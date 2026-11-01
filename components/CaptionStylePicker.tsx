@@ -296,12 +296,12 @@ export default function CaptionStylePicker({
   };
 
   return (
-    <Card className="border-slate-800/90 bg-slate-900/60 backdrop-blur-md shadow-xl shadow-violet-950/10 overflow-hidden">
-      <CardHeader className="pb-4 border-b border-slate-800/80 bg-slate-950/40">
+    <Card className="border-line bg-surface shadow-lg overflow-hidden">
+      <CardHeader className="pb-4 border-b border-line bg-canvas">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-300">
+              <div className="w-6 h-6 rounded-md bg-accent-soft border border-accent flex items-center justify-center text-ink">
                 <Palette className="w-3.5 h-3.5" />
               </div>
               <CardTitle className="text-base">
@@ -311,7 +311,7 @@ export default function CaptionStylePicker({
                 {styleConfig.presetId}
               </Badge>
             </div>
-            <CardDescription className="text-xs text-slate-400">
+            <CardDescription className="text-xs text-ink-muted">
               Choose a SOTA viral preset or fine-tune typography, karaoke
               highlight colors, font size (40–90px), and vertical safe-zone
               margins (200–800px).
@@ -324,9 +324,9 @@ export default function CaptionStylePicker({
               variant="ghost"
               size="sm"
               onClick={handleResetToActivePreset}
-              className="border border-slate-800 bg-slate-950/60 hover:bg-slate-800 text-slate-300 cursor-pointer"
+              className="border border-line bg-canvas hover:bg-surface-2 text-ink cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+              <RotateCcw className="w-3.5 h-3.5 text-ink-muted" />
               <span>Reset Style</span>
             </Button>
             <Button
@@ -334,9 +334,9 @@ export default function CaptionStylePicker({
               variant="outline"
               size="sm"
               onClick={() => setIsDrawerOpen((prev) => !prev)}
-              className="border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 cursor-pointer"
+              className="border-line bg-surface hover:bg-surface-2 text-ink cursor-pointer"
             >
-              <Sliders className="w-3.5 h-3.5 text-violet-400" />
+              <Sliders className="w-3.5 h-3.5 text-ink" />
               <span>{isDrawerOpen ? 'Hide Controls' : 'Granular Controls'}</span>
               {isDrawerOpen ? (
                 <ChevronUp className="w-3.5 h-3.5" />
@@ -354,11 +354,11 @@ export default function CaptionStylePicker({
            =================================================================== */}
         <div className="space-y-2.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-200 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-semibold text-ink flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-ink" />
               <span>1. Viral Caption Preset Gallery</span>
             </span>
-            <span className="text-[11px] font-mono text-slate-400">
+            <span className="text-[11px] font-mono text-ink-muted">
               Click any card to apply preset
             </span>
           </div>
@@ -374,24 +374,24 @@ export default function CaptionStylePicker({
                   onClick={() => handleChoosePreset(preset)}
                   className={`group relative text-left rounded-xl border p-3.5 transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                     isSelected
-                      ? 'border-violet-500 bg-slate-900/95 ring-2 ring-violet-500/30 shadow-lg shadow-violet-950/30'
-                      : 'border-slate-800/90 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900/70'
+                      ? 'border-accent bg-surface ring-2 ring-accent shadow-lg '
+                      : 'border-line bg-canvas hover:border-line hover:bg-surface'
                   }`}
                 >
                   {/* Top Badge + Active Check */}
                   <div className="flex items-center justify-between gap-2 mb-2.5">
-                    <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-slate-800/90 text-slate-300 border border-slate-700/70">
+                    <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-surface-2 text-ink border border-line">
                       {preset.badgeText}
                     </span>
                     {isSelected && (
-                      <span className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-emerald-300">
+                      <span className="w-5 h-5 rounded-full bg-success/10 border border-success/40 flex items-center justify-center text-success">
                         <Check className="w-3 h-3" />
                       </span>
                     )}
                   </div>
 
                   {/* Miniature Visual Typography Preview Banner */}
-                  <div className="h-14 rounded-lg bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800/90 flex items-center justify-center px-2 overflow-hidden mb-2.5 group-hover:border-slate-700 transition-colors">
+                  <div className="h-14 rounded-lg bg-accent border border-line flex items-center justify-center px-2 overflow-hidden mb-2.5 group-hover:border-line transition-colors">
                     <div
                       style={{
                         fontFamily: getFontStackCss(preset.config.fontFamily),
@@ -401,7 +401,7 @@ export default function CaptionStylePicker({
                       }}
                       className={`text-sm font-black tracking-tight flex items-center gap-1.5 select-none ${
                         preset.config.boxBackground
-                          ? 'bg-slate-950/85 px-2.5 py-1 rounded-md border border-white/10'
+                          ? 'bg-canvas px-2.5 py-1 rounded-md border border-line'
                           : ''
                       }`}
                     >
@@ -434,10 +434,10 @@ export default function CaptionStylePicker({
                     </div>
                   </div>
 
-                  <div className="font-semibold text-xs text-white">
+                  <div className="font-semibold text-xs text-ink">
                     {preset.title}
                   </div>
-                  <p className="text-[11px] text-slate-400 leading-snug mt-0.5 line-clamp-2">
+                  <p className="text-[11px] text-ink-muted leading-snug mt-0.5 line-clamp-2">
                     {preset.tagline}
                   </p>
                 </button>
@@ -449,19 +449,19 @@ export default function CaptionStylePicker({
         {/* ===================================================================
             2 & 3. GRANULAR CONTROLS DRAWER + LIVE 9:16 SMARTPHONE CARD CANVAS
            =================================================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pt-2 border-t border-slate-800/80">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pt-2 border-t border-line">
           {/* LEFT 7 COLS: Granular Controls Drawer */}
           <div className="lg:col-span-7 space-y-4">
             {isDrawerOpen ? (
-              <div className="rounded-xl border border-slate-800/90 bg-slate-950/65 p-4 space-y-5">
-                <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+              <div className="rounded-xl border border-line bg-canvas p-4 space-y-5">
+                <div className="flex items-center justify-between border-b border-line pb-3">
                   <div className="flex items-center gap-2">
-                    <Type className="w-4 h-4 text-cyan-400" />
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                    <Type className="w-4 h-4 text-ink" />
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-ink">
                       2. Granular Typography &amp; Safe-Zone Drawer
                     </h4>
                   </div>
-                  <span className="text-[11px] font-mono text-slate-400 tabular-nums">
+                  <span className="text-[11px] font-mono text-ink-muted tabular-nums">
                     1080×1920 ASS Coordinate Space
                   </span>
                 </div>
@@ -471,7 +471,7 @@ export default function CaptionStylePicker({
                   <div className="space-y-1.5">
                     <label
                       htmlFor="caption-font-family"
-                      className="text-xs font-medium text-slate-300 block"
+                      className="text-xs font-medium text-ink block"
                     >
                       Font Family
                     </label>
@@ -483,7 +483,7 @@ export default function CaptionStylePicker({
                           fontFamily: e.target.value as SupportedFontFamily,
                         })
                       }
-                      className="w-full h-9 px-3 rounded-lg bg-slate-900 border border-slate-700/80 text-xs font-medium text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                      className="w-full h-9 px-3 rounded-lg bg-surface border border-line text-xs font-medium text-ink focus:outline-none focus:border-accent cursor-pointer"
                     >
                       <option value="Impact">Impact (Hormozi Heavy)</option>
                       <option value="Montserrat">
@@ -496,7 +496,7 @@ export default function CaptionStylePicker({
 
                   {/* Stroke / Box / Uppercase Quick Pills */}
                   <div className="space-y-1.5">
-                    <span className="text-xs font-medium text-slate-300 block">
+                    <span className="text-xs font-medium text-ink block">
                       Text Modifiers
                     </span>
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -507,8 +507,8 @@ export default function CaptionStylePicker({
                         }
                         className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono transition-colors cursor-pointer ${
                           styleConfig.uppercase
-                            ? 'border-violet-500/60 bg-violet-500/20 text-violet-200'
-                            : 'border-slate-800 bg-slate-900 text-slate-400'
+                            ? 'border-accent bg-accent-soft text-ink'
+                            : 'border-line bg-surface text-ink-muted'
                         }`}
                       >
                         UPPERCASE
@@ -522,8 +522,8 @@ export default function CaptionStylePicker({
                         }
                         className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono transition-colors cursor-pointer ${
                           styleConfig.boxBackground
-                            ? 'border-cyan-500/60 bg-cyan-500/20 text-cyan-200'
-                            : 'border-slate-800 bg-slate-900 text-slate-400'
+                            ? 'border-accent bg-accent-soft text-ink'
+                            : 'border-line bg-surface text-ink-muted'
                         }`}
                       >
                         BOX BG
@@ -535,8 +535,8 @@ export default function CaptionStylePicker({
                         }
                         className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono transition-colors cursor-pointer ${
                           styleConfig.neonGlow
-                            ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-200'
-                            : 'border-slate-800 bg-slate-900 text-slate-400'
+                            ? 'border-success/40 bg-success/10 text-success'
+                            : 'border-line bg-surface text-ink-muted'
                         }`}
                       >
                         NEON GLOW
@@ -548,12 +548,12 @@ export default function CaptionStylePicker({
                 {/* Primary Text Color & Active Karaoke Highlight Color Pickers */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                   {/* Primary Text Color Picker */}
-                  <div className="rounded-lg border border-slate-800/90 bg-slate-900/60 p-3 space-y-2.5">
+                  <div className="rounded-lg border border-line bg-surface p-3 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-200">
+                      <span className="text-xs font-medium text-ink">
                         Primary Text Color
                       </span>
-                      <span className="text-[11px] font-mono text-slate-400 uppercase">
+                      <span className="text-[11px] font-mono text-ink-muted uppercase">
                         {styleConfig.primaryColor}
                       </span>
                     </div>
@@ -567,7 +567,7 @@ export default function CaptionStylePicker({
                             primaryColor: e.target.value.toUpperCase(),
                           })
                         }
-                        className="w-8 h-8 rounded cursor-pointer bg-transparent border border-slate-700"
+                        className="w-8 h-8 rounded cursor-pointer bg-transparent border border-line"
                       />
                       <div className="flex flex-wrap items-center gap-1.5">
                         {QUICK_PRIMARY_SWATCHES.map((hex) => (
@@ -579,8 +579,8 @@ export default function CaptionStylePicker({
                             title={`Set primary color ${hex}`}
                             className={`w-5 h-5 rounded-full border transition-transform cursor-pointer ${
                               styleConfig.primaryColor.toUpperCase() === hex
-                                ? 'scale-115 ring-2 ring-cyan-400 border-white'
-                                : 'border-slate-700 hover:scale-110'
+                                ? 'scale-115 ring-2 ring-accent border-white'
+                                : 'border-line hover:scale-110'
                             }`}
                           />
                         ))}
@@ -589,12 +589,12 @@ export default function CaptionStylePicker({
                   </div>
 
                   {/* Active Karaoke Highlight Color Picker */}
-                  <div className="rounded-lg border border-slate-800/90 bg-slate-900/60 p-3 space-y-2.5">
+                  <div className="rounded-lg border border-line bg-surface p-3 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-200">
+                      <span className="text-xs font-medium text-ink">
                         Active Karaoke Highlight
                       </span>
-                      <span className="text-[11px] font-mono text-cyan-300 uppercase">
+                      <span className="text-[11px] font-mono text-ink uppercase">
                         {styleConfig.highlightColor}
                       </span>
                     </div>
@@ -608,7 +608,7 @@ export default function CaptionStylePicker({
                             highlightColor: e.target.value.toUpperCase(),
                           })
                         }
-                        className="w-8 h-8 rounded cursor-pointer bg-transparent border border-slate-700"
+                        className="w-8 h-8 rounded cursor-pointer bg-transparent border border-line"
                       />
                       <div className="flex flex-wrap items-center gap-1.5">
                         {QUICK_HIGHLIGHT_SWATCHES.map((hex) => (
@@ -622,8 +622,8 @@ export default function CaptionStylePicker({
                             title={`Set active karaoke highlight ${hex}`}
                             className={`w-5 h-5 rounded-full border transition-transform cursor-pointer ${
                               styleConfig.highlightColor.toUpperCase() === hex
-                                ? 'scale-115 ring-2 ring-white border-slate-950'
-                                : 'border-slate-700 hover:scale-110'
+                                ? 'scale-115 ring-2 ring-white border-line'
+                                : 'border-line hover:scale-110'
                             }`}
                           />
                         ))}
@@ -633,15 +633,15 @@ export default function CaptionStylePicker({
                 </div>
 
                 {/* Font Size Slider (40px to 90px) */}
-                <div className="rounded-lg border border-slate-800/90 bg-slate-900/60 p-3.5 space-y-2">
+                <div className="rounded-lg border border-line bg-surface p-3.5 space-y-2">
                   <div className="flex items-center justify-between">
                     <label
                       htmlFor="caption-font-size-slider"
-                      className="text-xs font-medium text-slate-200"
+                      className="text-xs font-medium text-ink"
                     >
                       Font Size (1080p ASS Scale)
                     </label>
-                    <span className="text-xs font-mono font-bold text-cyan-300 tabular-nums">
+                    <span className="text-xs font-mono font-bold text-ink tabular-nums">
                       {styleConfig.fontSizePx}px
                     </span>
                   </div>
@@ -657,7 +657,7 @@ export default function CaptionStylePicker({
                     }
                     className="w-full accent-violet-500 cursor-pointer"
                   />
-                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 tabular-nums">
+                  <div className="flex items-center justify-between text-[10px] font-mono text-ink-muted tabular-nums">
                     <span>40px (Compact)</span>
                     <span>65px (Standard Short)</span>
                     <span>90px (Max Billboard)</span>
@@ -665,22 +665,22 @@ export default function CaptionStylePicker({
                 </div>
 
                 {/* Vertical Margin Slider (200px to 800px from bottom) with TikTok/Reels Safe-Zone Indicator */}
-                <div className="rounded-lg border border-slate-800/90 bg-slate-900/60 p-3.5 space-y-2.5">
+                <div className="rounded-lg border border-line bg-surface p-3.5 space-y-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <label
                       htmlFor="caption-margin-v-slider"
-                      className="text-xs font-medium text-slate-200"
+                      className="text-xs font-medium text-ink"
                     >
                       Vertical Margin from Bottom (ASS MarginV)
                     </label>
                     <div className="flex items-center gap-2">
                       {isInSafeZone ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-[10px] font-mono text-emerald-300">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-success/10 border border-success/40 text-[10px] font-mono text-success">
                           <ShieldCheck className="w-3 h-3" />
                           <span>TikTok/Reels UI Safe Zone</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-[10px] font-mono text-amber-300">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent-soft border border-accent text-[10px] font-mono text-ink">
                           <AlertTriangle className="w-3 h-3" />
                           <span>
                             {isTooLow
@@ -689,7 +689,7 @@ export default function CaptionStylePicker({
                           </span>
                         </span>
                       )}
-                      <span className="text-xs font-mono font-bold text-violet-300 tabular-nums">
+                      <span className="text-xs font-mono font-bold text-ink tabular-nums">
                         {styleConfig.marginBottomPx}px
                       </span>
                     </div>
@@ -697,23 +697,23 @@ export default function CaptionStylePicker({
 
                   {/* Visual Safe-Zone Track Bar behind Slider */}
                   <div className="relative pt-1">
-                    <div className="w-full h-2 rounded-full bg-slate-950 border border-slate-800 overflow-hidden flex">
+                    <div className="w-full h-2 rounded-full bg-canvas border border-line overflow-hidden flex">
                       {/* 200..340px: Danger Zone (23%) */}
                       <div
                         style={{ width: '23.3%' }}
-                        className="h-full bg-amber-500/30 border-r border-amber-500/40"
+                        className="h-full bg-accent-soft border-r border-accent"
                         title="200px–340px: TikTok Bottom Metadata Collision Zone"
                       />
                       {/* 340..680px: Safe Zone (56.7%) */}
                       <div
                         style={{ width: '56.7%' }}
-                        className="h-full bg-emerald-500/30 border-r border-emerald-500/40"
+                        className="h-full bg-success/10 border-r border-success/40"
                         title="340px–680px: TikTok / Reels / Shorts Optimal Visual Safe Zone"
                       />
                       {/* 680..800px: Upper Face Zone (20%) */}
                       <div
                         style={{ width: '20%' }}
-                        className="h-full bg-violet-500/25"
+                        className="h-full bg-accent-soft"
                         title="680px–800px: Upper Center Subject Zone"
                       />
                     </div>
@@ -731,9 +731,9 @@ export default function CaptionStylePicker({
                     />
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 tabular-nums">
+                  <div className="flex items-center justify-between text-[10px] font-mono text-ink-muted tabular-nums">
                     <span>200px (Bottom Edge)</span>
-                    <span className="text-emerald-400 font-semibold">
+                    <span className="text-success font-semibold">
                       340px–680px (TikTok/Reels Safe Zone)
                     </span>
                     <span>800px (Center-High)</span>
@@ -741,20 +741,20 @@ export default function CaptionStylePicker({
                 </div>
 
                 {/* Generated FFmpeg .ASS Style Line Inspector */}
-                <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-1.5">
+                <div className="rounded-lg border border-line bg-canvas p-3 space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <Code2 className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+                      <Code2 className="w-3.5 h-3.5 text-ink" />
                       <span>Generated FFmpeg .ASS V4+ Style Line</span>
                     </span>
                     <button
                       type="button"
                       onClick={handleCopyAssLine}
-                      className="inline-flex items-center gap-1 text-[10px] font-mono text-cyan-300 hover:text-cyan-200 cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[10px] font-mono text-ink hover:text-ink cursor-pointer"
                     >
                       {copiedAssStyle ? (
                         <>
-                          <Check className="w-3 h-3 text-emerald-400" />
+                          <Check className="w-3 h-3 text-success" />
                           <span>Copied</span>
                         </>
                       ) : (
@@ -765,14 +765,14 @@ export default function CaptionStylePicker({
                       )}
                     </button>
                   </div>
-                  <pre className="text-[10px] font-mono text-slate-300 overflow-x-auto pb-1">
+                  <pre className="text-[10px] font-mono text-ink overflow-x-auto pb-1">
                     <code>{assStyleLine}</code>
                   </pre>
                 </div>
               </div>
             ) : (
-              <div className="rounded-xl border border-slate-800/80 bg-slate-950/50 p-4 flex items-center justify-between">
-                <span className="text-xs text-slate-400">
+              <div className="rounded-xl border border-line bg-canvas p-4 flex items-center justify-between">
+                <span className="text-xs text-ink-muted">
                   Granular typography &amp; margin controls are collapsed.
                 </span>
                 <Button
@@ -792,13 +792,13 @@ export default function CaptionStylePicker({
              ================================================================= */}
           <div className="lg:col-span-5 flex flex-col items-center">
             <div className="w-full flex items-center justify-between mb-2.5 px-1">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
-                <Smartphone className="w-3.5 h-3.5 text-cyan-400" />
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+                <Smartphone className="w-3.5 h-3.5 text-ink" />
                 <span>3. Live 9:16 Smartphone Canvas</span>
               </div>
 
               <div className="flex items-center gap-3">
-                <label className="inline-flex items-center gap-1.5 text-[11px] font-mono text-slate-400 cursor-pointer">
+                <label className="inline-flex items-center gap-1.5 text-[11px] font-mono text-ink-muted cursor-pointer">
                   <span>Safe Zones</span>
                   <Switch
                     checked={showSafeZoneGuides}
@@ -808,16 +808,16 @@ export default function CaptionStylePicker({
                 <button
                   type="button"
                   onClick={() => setAnimateKaraokeLoop((v) => !v)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-800 bg-slate-900 text-[10px] font-mono text-slate-300 hover:text-white cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-line bg-surface text-[10px] font-mono text-ink hover:text-ink cursor-pointer"
                 >
                   {animateKaraokeLoop ? (
                     <>
-                      <Pause className="w-2.5 h-2.5 text-cyan-400" />
+                      <Pause className="w-2.5 h-2.5 text-ink" />
                       <span>Karaoke Live</span>
                     </>
                   ) : (
                     <>
-                      <Play className="w-2.5 h-2.5 text-slate-400" />
+                      <Play className="w-2.5 h-2.5 text-ink-muted" />
                       <span>Paused</span>
                     </>
                   )}
@@ -826,27 +826,27 @@ export default function CaptionStylePicker({
             </div>
 
             {/* 9:16 Smartphone Mockup Container */}
-            <div className="relative w-full max-w-[290px] aspect-[9/16] rounded-[28px] border-2 border-slate-700/90 bg-slate-950 shadow-2xl shadow-black/80 overflow-hidden select-none">
+            <div className="relative w-full max-w-[290px] aspect-[9/16] rounded-[28px] border-2 border-line bg-canvas shadow-lg overflow-hidden select-none">
               {/* Top Speaker Notch */}
-              <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-20 h-4 rounded-full bg-black/80 border border-slate-800 z-30 flex items-center justify-center">
-                <div className="w-8 h-1 rounded-full bg-slate-800" />
+              <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-20 h-4 rounded-full bg-black/80 border border-line z-30 flex items-center justify-center">
+                <div className="w-8 h-1 rounded-full bg-surface-2" />
               </div>
 
               {/* Simulated Dual-Layer 9:16 Video Background */}
-              <div className="absolute inset-0 bg-gradient-to-b from-slate-900 via-indigo-950/60 to-slate-950">
+              <div className="absolute inset-0 bg-accent ">
                 {/* Blurred ambient light blobs */}
-                <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full bg-violet-600/20 blur-2xl" />
-                <div className="absolute bottom-1/3 left-1/3 w-36 h-36 rounded-full bg-cyan-500/15 blur-2xl" />
+                <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full bg-accent-soft blur-2xl" />
+                <div className="absolute bottom-1/3 left-1/3 w-36 h-36 rounded-full bg-accent-soft blur-2xl" />
 
                 {/* Simulated Center Speaker Foreground Frame */}
-                <div className="absolute inset-x-0 top-[18%] h-[42%] border-y border-white/10 bg-slate-900/75 flex flex-col items-center justify-center px-4 text-center">
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-violet-500/40 to-cyan-400/40 border border-white/20 flex items-center justify-center mb-2">
-                    <Eye className="w-6 h-6 text-cyan-200/80" />
+                <div className="absolute inset-x-0 top-[18%] h-[42%] border-y border-line bg-surface flex flex-col items-center justify-center px-4 text-center">
+                  <div className="w-14 h-14 rounded-full bg-accent border border-line flex items-center justify-center mb-2">
+                    <Eye className="w-6 h-6 text-ink" />
                   </div>
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-ink-muted">
                     1080×1920 Active Speaker
                   </span>
-                  <span className="text-[9px] font-mono text-slate-500 mt-0.5">
+                  <span className="text-[9px] font-mono text-ink-subtle mt-0.5">
                     Font: {styleConfig.fontFamily} · {styleConfig.fontSizePx}px
                   </span>
                 </div>
@@ -856,8 +856,8 @@ export default function CaptionStylePicker({
               {showSafeZoneGuides && (
                 <div className="absolute inset-0 pointer-events-none z-20">
                   {/* Top Header Unsafe Strip */}
-                  <div className="absolute inset-x-0 top-0 h-[11%] bg-rose-500/10 border-b border-dashed border-rose-400/50 flex items-end justify-center pb-1">
-                    <span className="text-[8px] font-mono uppercase tracking-wider text-rose-300/90">
+                  <div className="absolute inset-x-0 top-0 h-[11%] bg-danger/10 border-b border-dashed border-danger/40 flex items-end justify-center pb-1">
+                    <span className="text-[8px] font-mono uppercase tracking-wider text-danger">
                       Top App Bar Unsafe Zone
                     </span>
                   </div>
@@ -868,16 +868,16 @@ export default function CaptionStylePicker({
                       bottom: `${(340 / 1920) * 100}%`,
                       height: `${((680 - 340) / 1920) * 100}%`,
                     }}
-                    className="absolute inset-x-2 border border-dashed border-emerald-400/60 bg-emerald-500/5 rounded-lg flex items-start justify-between px-2 pt-1"
+                    className="absolute inset-x-2 border border-dashed border-success/40 bg-success/10 rounded-lg flex items-start justify-between px-2 pt-1"
                   >
-                    <span className="text-[8px] font-mono uppercase tracking-wider text-emerald-300 bg-slate-950/80 px-1.5 py-0.5 rounded">
+                    <span className="text-[8px] font-mono uppercase tracking-wider text-success bg-canvas px-1.5 py-0.5 rounded">
                       TikTok/Reels Safe Zone (340–680px)
                     </span>
                   </div>
 
                   {/* Right-Side Action Icons Unsafe Column */}
-                  <div className="absolute right-1.5 bottom-[18%] w-10 flex flex-col items-center gap-3 py-2 rounded-full bg-slate-950/50 border border-dashed border-amber-400/40 text-white/70">
-                    <Heart className="w-4 h-4 text-rose-400/80" />
+                  <div className="absolute right-1.5 bottom-[18%] w-10 flex flex-col items-center gap-3 py-2 rounded-full bg-canvas border border-dashed border-accent text-ink">
+                    <Heart className="w-4 h-4 text-danger" />
                     <MessageCircle className="w-4 h-4" />
                     <Bookmark className="w-4 h-4" />
                     <Share2 className="w-4 h-4" />
@@ -886,15 +886,15 @@ export default function CaptionStylePicker({
                   {/* Bottom Caption & Audio Ticker Unsafe Zone (<340px from bottom) */}
                   <div
                     style={{ height: `${(340 / 1920) * 100}%` }}
-                    className="absolute inset-x-0 bottom-0 bg-amber-500/10 border-t border-dashed border-amber-400/60 p-2.5 flex flex-col justify-end"
+                    className="absolute inset-x-0 bottom-0 bg-accent-soft border-t border-dashed border-accent p-2.5 flex flex-col justify-end"
                   >
-                    <div className="text-[9px] font-semibold text-white/75">
+                    <div className="text-[9px] font-semibold text-ink">
                       @clipperx_creator
                     </div>
-                    <div className="text-[8px] text-slate-300/70 truncate">
+                    <div className="text-[8px] text-ink truncate">
                       Original audio — AI Short-Form Video Clipper #shorts
                     </div>
-                    <span className="mt-1 inline-block text-[8px] font-mono uppercase text-amber-300">
+                    <span className="mt-1 inline-block text-[8px] font-mono uppercase text-ink">
                       ▲ UI Collision Zone (&lt;340px)
                     </span>
                   </div>
@@ -916,7 +916,7 @@ export default function CaptionStylePicker({
                   }}
                   className={`text-center font-black leading-tight tracking-tight flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 px-3 py-1.5 ${
                     styleConfig.boxBackground
-                      ? 'bg-slate-950/85 rounded-xl border border-white/15 shadow-lg backdrop-blur-sm'
+                      ? 'bg-canvas rounded-xl border border-line shadow-lg '
                       : ''
                   }`}
                 >
@@ -960,8 +960,8 @@ export default function CaptionStylePicker({
                 <span
                   className={`mt-1 px-1.5 py-0.2 rounded text-[8px] font-mono tabular-nums border ${
                     isInSafeZone
-                      ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-300'
-                      : 'bg-amber-950/90 border-amber-500/50 text-amber-300'
+                      ? 'bg-success border-success/40 text-success'
+                      : 'bg-accent border-accent text-ink'
                   }`}
                 >
                   MarginV: {styleConfig.marginBottomPx}px ·{' '}

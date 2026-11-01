@@ -2,3 +2,84 @@
 
 /* Session logs contain Windows paths like \25487a that crash Tailwind's class scanner */
 @source not "../.claude-logs";
+
+/*
+ * ClipperX tokens. Neutral surfaces, one marigold accent (the colour of in/out markers in
+ * video editors) that always carries dark text. Light by default, dark with the system.
+ */
+:root {
+  --canvas: #f5f6f4;
+  --surface: #ffffff;
+  --surface-2: #eef0ec;
+  --line: #e2e4e0;
+  --line-strong: #cfd2cc;
+  --ink: #17191c;
+  --ink-muted: #63676e;
+  --ink-subtle: #8a8e95;
+  --accent: #f2b705;
+  --accent-hover: #dba503;
+  --accent-soft: #fdf1c7;
+  --on-accent: #17191c;
+  --success: #2e8a55;
+  --danger: #c93c3c;
+  --overlay: rgb(23 25 28 / 0.45);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #121315;
+    --surface: #1a1b1e;
+    --surface-2: #232428;
+    --line: #2e3034;
+    --line-strong: #3d4045;
+    --ink: #ecedef;
+    --ink-muted: #9a9ea6;
+    --ink-subtle: #70747c;
+    --accent: #f5c02e;
+    --accent-hover: #ffd055;
+    --accent-soft: #3a3115;
+    --on-accent: #17191c;
+    --success: #4cbb7a;
+    --danger: #ef6b6b;
+    --overlay: rgb(0 0 0 / 0.6);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-subtle: var(--ink-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-overlay: var(--overlay);
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-feature-settings: "tnum" 1;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

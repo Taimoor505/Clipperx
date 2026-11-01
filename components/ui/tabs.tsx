@@ -41,7 +41,7 @@ export function TabsList({
     <div
       role="tablist"
       className={cn(
-        'inline-flex items-center justify-start rounded-lg bg-slate-950/90 border border-slate-800/90 p-1 text-slate-400',
+        'inline-flex items-center justify-start rounded-lg bg-canvas border border-line p-1 text-ink-muted',
         className
       )}
     >
@@ -71,8 +71,8 @@ export function TabsTrigger({
       className={cn(
         'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-150 cursor-pointer shrink-0',
         isActive
-          ? 'bg-slate-800/90 text-white shadow-sm border border-violet-500/30'
-          : 'text-slate-400 hover:text-slate-200',
+          ? 'bg-surface-2 text-ink shadow-sm border border-accent'
+          : 'text-ink-muted hover:text-ink',
         className
       )}
     >

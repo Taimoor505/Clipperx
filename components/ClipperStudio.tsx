@@ -21,6 +21,7 @@ import {
   Music,
   Share2,
   Code2,
+  MoreHorizontal,
 } from 'lucide-react';
 import {
   ViralClipSegment,
@@ -31,9 +32,6 @@ import {
 import TranscriptEditor from './TranscriptEditor';
 import CaptionStylePicker from './CaptionStylePicker';
 import ViralityInsightsModal from './ViralityInsightsModal';
-import BatchExportDrawer from './BatchExportDrawer';
-import SocialPublishModal from './SocialPublishModal';
-import AudioStudioDrawer from './AudioStudioDrawer';
 import {
   STREAMLIT_APP_PY_CODE,
   detectContextualEmojis,
@@ -177,6 +175,8 @@ const INITIAL_DEMO_CLIPS: ViralClipSegment[] = [
 // FastAPI + FFmpeg worker (apps/api). When unset, the app falls back to the
 // metadata-only /api/analyze route and in-browser canvas export.
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
+// The desktop app saves clips into a folder instead of browser downloads
+const IS_DESKTOP = process.env.NEXT_PUBLIC_CLIPPERX_DESKTOP === '1';
 
 // Clip pickers for the transcript engine (ids from https://openrouter.ai/models)
 const OPENROUTER_MODELS = [
@@ -330,6 +330,82 @@ async function downloadFromLink(
   return (await imported.json()).video_id;
 }
 
+type DesktopInfo = {
+  output_dir: string;
+  keys: { openrouter: boolean; gemini: boolean };
+  whisper_ready: boolean;
+  whisper_error: string;
+};
+
+type RenderOptions = {
+  burnInCaptions: boolean;
+  dynamicZoom: boolean;
+  captionPreset: CaptionPresetName;
+  exportLayout: ExportLayout;
+};
+
+function clipFileName(clip: ViralClipSegment): string {
+  const title = clip.title.replace(/[<>:"/\|?* -]/g, '').trim().slice(0, 70) || 'clip';
+  return `${String(clip.clip_id).padStart(2, '0')} - ${title}.mp4`;
+}
+
+/**
+ * Renders one clip on the backend (real FFmpeg) and saves the MP4: into the clips folder in
+ * the desktop app (returns its path), or as a browser download (returns null).
+ */
+async function renderAndSaveClip(
+  clip: ViralClipSegment,
+  sourceVideoId: string,
+  options: RenderOptions
+): Promise<string | null> {
+  const form = new FormData();
+  form.append('video_id', sourceVideoId);
+  form.append('start_time', clip.start_time);
+  form.append('end_time', clip.end_time);
+  form.append('burn_captions', String(options.burnInCaptions));
+  form.append('dynamic_zoom', String(options.dynamicZoom));
+  form.append('caption_preset', options.captionPreset);
+  form.append('transcript_json', JSON.stringify(clip.transcript_lines ?? []));
+  await appendExportLayout(form, options.exportLayout);
+  if (IS_DESKTOP) {
+    form.append('save', 'true');
+    form.append('filename', clipFileName(clip));
+  }
+  const response = await fetch(`${BACKEND_URL}/api/render`, { method: 'POST', body: form });
+  if (!response.ok) throw new Error(await readErrorDetail(response));
+  if (IS_DESKTOP) return (await response.json()).saved_to as string;
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = clipFileName(clip);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return null;
+}
+
+/** Desktop app: reveal a saved clip (or the clips folder) in File Explorer. */
+function showInFolder(path?: string | null): void {
+  fetch(`${BACKEND_URL}/api/desktop/show`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(path ? { path } : {}),
+  }).catch(() => {});
+}
+
+const NO_SOURCE_MESSAGE =
+  'The video for these clips is no longer available. Add it again to download clips.';
+
+function formatClock(total: number): string {
+  const s = Math.max(0, Math.round(total));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+}
+
 function secondsToTimestamp(sec: number): string {
   const safe = Math.max(0, sec);
   const hrs = Math.floor(safe / 3600);
@@ -358,6 +434,7 @@ interface MinimalVerticalClipCardProps {
   onChangeTitle: (newTitle: string) => void;
   onAdjustTrim: (edge: 'start' | 'end', delta: number) => void;
   onOpenModal: (modal: ActiveModalType) => void;
+  onSaved: (path: string) => void;
 }
 
 function MinimalVerticalClipCard({
@@ -373,6 +450,7 @@ function MinimalVerticalClipCard({
   onChangeTitle,
   onAdjustTrim,
   onOpenModal,
+  onSaved,
 }: MinimalVerticalClipCardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -380,6 +458,7 @@ function MinimalVerticalClipCard({
   const [elapsed, setElapsed] = useState<number>(0);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [downloadedDone, setDownloadedDone] = useState<boolean>(false);
+  const [menuOpen, setMenuOpen] = useState<boolean>(false);
 
   const startSec = timestampToSeconds(clip.start_time);
   const duration = Math.max(5, clip.duration_seconds);
@@ -401,7 +480,14 @@ function MinimalVerticalClipCard({
       const vid = videoRef.current;
       const hasReadyVideo = vid && videoFileUrl && vid.readyState >= 2;
 
-      if (hasReadyVideo && vid) {
+      if (hasReadyVideo && vid && exportLayout.framing !== 'fit' && vid.videoWidth > 0) {
+        // Speaker framing preview: fill the frame, centred. The real render follows the
+        // speaker's face; this is an approximation that matches its look.
+        const scale = Math.max(W / vid.videoWidth, H / vid.videoHeight);
+        const dw = vid.videoWidth * scale;
+        const dh = vid.videoHeight * scale;
+        ctx.drawImage(vid, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      } else if (hasReadyVideo && vid) {
         // Blurred 9:16 fill background
         ctx.save();
         ctx.filter = 'blur(18px) brightness(0.5)';
@@ -417,26 +503,8 @@ function MinimalVerticalClipCard({
         ctx.drawImage(vid, fgX, fgY, fgW, fgH);
         ctx.restore();
       } else {
-        // Clean dark studio procedural canvas
-        const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
-        bgGrad.addColorStop(0, '#131129');
-        bgGrad.addColorStop(0.5, '#0B0F17');
-        bgGrad.addColorStop(1, '#090D16');
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, W, H);
-
-        // Ambient violet glow orb
-        const radGrad = ctx.createRadialGradient(
-          W * 0.5,
-          H * 0.42,
-          10,
-          W * 0.5,
-          H * 0.42,
-          W * 0.6
-        );
-        radGrad.addColorStop(0, 'rgba(124, 58, 237, 0.28)');
-        radGrad.addColorStop(1, 'rgba(11, 15, 23, 0)');
-        ctx.fillStyle = radGrad;
+        // No local video (link imports): a quiet neutral placeholder with the captions
+        ctx.fillStyle = '#1a1b1e';
         ctx.fillRect(0, 0, W, H);
 
         // Foreground 16:9 frame with audio waveform
@@ -445,11 +513,8 @@ function MinimalVerticalClipCard({
         const fgX = (W - fgW) / 2;
         const fgY = (H - fgH) / 2 - 20;
 
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.fillStyle = '#232428';
         ctx.fillRect(fgX, fgY, fgW, fgH);
-        ctx.strokeStyle = 'rgba(124, 58, 237, 0.25)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(fgX, fgY, fgW, fgH);
 
         const bars = 24;
         const barSpan = fgW * 0.66;
@@ -466,10 +531,7 @@ function MinimalVerticalClipCard({
               42 *
               zoom +
             6;
-          ctx.fillStyle =
-            i % 2 === 0
-              ? 'rgba(124, 58, 237, 0.9)'
-              : 'rgba(167, 139, 250, 0.65)';
+          ctx.fillStyle = i % 2 === 0 ? 'rgba(236, 237, 239, 0.45)' : 'rgba(236, 237, 239, 0.25)';
           ctx.fillRect(
             baseX + i * (barSpan / bars),
             midY - amp / 2,
@@ -590,6 +652,7 @@ function MinimalVerticalClipCard({
       dynamicZoom,
       isPlaying,
       videoFileUrl,
+      exportLayout.framing,
     ]
   );
 
@@ -597,6 +660,24 @@ function MinimalVerticalClipCard({
   useEffect(() => {
     drawPreviewFrame(elapsed);
   }, [elapsed, drawPreviewFrame]);
+
+  // Poster: show a real frame from the clip before anyone hovers
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid || !videoFileUrl) return;
+    const posterAt = startSec + Math.min(2, duration / 3);
+    const seek = () => {
+      if (vid.paused) vid.currentTime = posterAt;
+    };
+    const draw = () => drawPreviewFrame(0);
+    vid.addEventListener('loadeddata', seek);
+    vid.addEventListener('seeked', draw);
+    if (vid.readyState >= 1) seek();
+    return () => {
+      vid.removeEventListener('loadeddata', seek);
+      vid.removeEventListener('seeked', draw);
+    };
+  }, [videoFileUrl, startSec, duration, drawPreviewFrame]);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -633,109 +714,33 @@ function MinimalVerticalClipCard({
   };
 
   // Primary CTA: Download MP4 / WebM
-  const handleDownloadClip = (e: React.MouseEvent) => {
+  const handleDownloadClip = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isDownloading) return;
+    if (!BACKEND_URL || !sourceVideoId) {
+      window.alert(NO_SOURCE_MESSAGE);
+      return;
+    }
     setIsDownloading(true);
-
-    // Real FFmpeg render on the backend worker
-    if (BACKEND_URL && sourceVideoId) {
-      const form = new FormData();
-      form.append('video_id', sourceVideoId);
-      form.append('start_time', clip.start_time);
-      form.append('end_time', clip.end_time);
-      form.append('burn_captions', String(burnInCaptions));
-      form.append('dynamic_zoom', String(dynamicZoom));
-      form.append('caption_preset', captionPreset);
-      form.append('transcript_json', JSON.stringify(clip.transcript_lines ?? []));
-      appendExportLayout(form, exportLayout)
-        .then(() => fetch(`${BACKEND_URL}/api/render`, { method: 'POST', body: form }))
-        .then(async (response) => {
-          if (!response.ok) throw new Error(await readErrorDetail(response));
-          const blob = await response.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `clipperx_short_${clip.clip_id}_${CANVAS_LABELS[exportLayout.aspectRatio]}.mp4`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-          setDownloadedDone(true);
-          window.setTimeout(() => setDownloadedDone(false), 2500);
-        })
-        .catch((err: unknown) => {
-          window.alert(
-            `Render failed: ${err instanceof Error ? err.message : String(err)}`
-          );
-        })
-        .finally(() => setIsDownloading(false));
-      return;
-    }
-
-    if (BACKEND_URL) {
-      window.alert(
-        'These clips came from a link, so there is no video file to cut. ' +
-          'Upload the video file to render MP4s.'
-      );
-      setIsDownloading(false);
-      return;
-    }
-
-    handleStartPlay();
-
-    const canvas = canvasRef.current;
-    if (
-      canvas &&
-      typeof MediaRecorder !== 'undefined' &&
-      typeof canvas.captureStream === 'function'
-    ) {
-      try {
-        const stream = canvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, {
-          mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-            ? 'video/webm;codecs=vp9'
-            : 'video/webm',
-        });
-        const chunks: BlobPart[] = [];
-        recorder.ondataavailable = (ev) => {
-          if (ev.data.size > 0) chunks.push(ev.data);
-        };
-        recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: 'video/mp4' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `clipperx_short_${clip.clip_id}_1080x1920.mp4`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-          setIsDownloading(false);
-          setDownloadedDone(true);
-          handleStopPlay();
-          window.setTimeout(() => setDownloadedDone(false), 2500);
-        };
-        recorder.start();
-        window.setTimeout(() => {
-          if (recorder.state !== 'inactive') recorder.stop();
-        }, 1600);
-        return;
-      } catch {
-        // Fallback below
-      }
-    }
-
-    window.setTimeout(() => {
-      setIsDownloading(false);
+    try {
+      const savedTo = await renderAndSaveClip(clip, sourceVideoId, {
+        burnInCaptions,
+        dynamicZoom,
+        captionPreset,
+        exportLayout,
+      });
+      if (savedTo) onSaved(savedTo);
       setDownloadedDone(true);
-      handleStopPlay();
       window.setTimeout(() => setDownloadedDone(false), 2500);
-    }, 900);
+    } catch (err: unknown) {
+      window.alert(`Couldn't render this clip: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
-    <div className="group rounded-2xl border border-white/10 bg-[#121723] overflow-hidden shadow-xl transition-all hover:border-[#7C3AED]/60 flex flex-col">
+    <article className="group rounded-xl border border-line bg-surface overflow-hidden flex flex-col">
       {/* Hidden source video for real file playback */}
       {videoFileUrl && (
         <video
@@ -747,12 +752,12 @@ function MinimalVerticalClipCard({
         />
       )}
 
-      {/* 1. 9:16 VERTICAL VIDEO PREVIEWER (Plays on hover or click) */}
+      {/* Preview: plays on hover or click */}
       <div
         onMouseEnter={handleStartPlay}
         onMouseLeave={handleStopPlay}
         onClick={() => (isPlaying ? handleStopPlay() : handleStartPlay())}
-        className="relative w-full aspect-[9/16] bg-[#0B0F17] cursor-pointer overflow-hidden select-none"
+        className="relative w-full aspect-[9/16] bg-black cursor-pointer overflow-hidden select-none"
       >
         <canvas
           ref={canvasRef}
@@ -761,159 +766,278 @@ function MinimalVerticalClipCard({
           className="w-full h-full object-cover"
         />
 
-        {/* 2. TOP OVERLAY: Small Virality Badge ("🔥 96% Viral") + Subtle Batch Checkbox */}
-        <div className="absolute top-3 inset-x-3 flex items-center justify-between z-20">
-          <label
-            onClick={(e) => e.stopPropagation()}
-            title="Select for batch export"
-            className="w-7 h-7 rounded-lg bg-black/60 backdrop-blur-md border border-white/15 flex items-center justify-center cursor-pointer"
-          >
-            <input
-              type="checkbox"
-              aria-label={`Select Clip #${clip.clip_id}`}
-              checked={isBatchSelected}
-              onChange={onToggleBatchSelect}
-              className="w-3.5 h-3.5 accent-[#7C3AED] cursor-pointer"
-            />
-          </label>
+        <label
+          onClick={(e) => e.stopPropagation()}
+          title="Select for batch export"
+          className={`absolute top-2.5 left-2.5 z-20 w-7 h-7 rounded-md bg-black/55 flex items-center justify-center cursor-pointer transition-opacity ${
+            isBatchSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
+          }`}
+        >
+          <input
+            type="checkbox"
+            aria-label={`Select ${clip.title}`}
+            checked={isBatchSelected}
+            onChange={onToggleBatchSelect}
+            className="w-3.5 h-3.5 accent-accent cursor-pointer"
+          />
+        </label>
 
+        <div
+          className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-150 ${
+            isPlaying ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        >
+          <div className="w-12 h-12 rounded-full bg-black/55 flex items-center justify-center text-white">
+            <Play className="w-5 h-5 ml-0.5" />
+          </div>
+        </div>
+
+        <div className="absolute bottom-2.5 inset-x-2.5 flex items-end justify-between z-20 pointer-events-none">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onOpenModal('insights');
             }}
-            className="px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md border border-white/15 text-xs font-semibold text-white flex items-center gap-1 shadow-md hover:border-[#7C3AED] transition-colors cursor-pointer"
+            title="Why this clip was picked"
+            className="pointer-events-auto rounded-md bg-black/60 px-2 py-1 text-[11px] font-semibold text-white tabular-nums cursor-pointer hover:bg-black/75"
           >
-            <span>🔥 {clip.virality_score}% Viral</span>
+            Score {clip.virality_score}
           </button>
-        </div>
-
-        {/* Center Play/Pause Hover Indicator */}
-        <div
-          className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200 ${
-            isPlaying ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'
-          }`}
-        >
-          <div className="w-11 h-11 rounded-full bg-black/65 backdrop-blur-md border border-white/20 flex items-center justify-center text-white">
-            {isPlaying ? (
-              <Pause className="w-4 h-4" />
-            ) : (
-              <Play className="w-4 h-4 ml-0.5" />
-            )}
-          </div>
-        </div>
-
-        {/* Minimal ±2s Quick Trim Pill on Hover */}
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="absolute bottom-2.5 inset-x-3 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-20"
-        >
-          <div className="inline-flex items-center gap-1 rounded-lg bg-black/75 backdrop-blur-md border border-white/15 px-1.5 py-0.5 text-[10px] font-mono text-slate-300">
-            <button
-              type="button"
-              onClick={() => onAdjustTrim('start', -2)}
-              className="hover:text-white px-1 cursor-pointer"
-            >
-              -2s
-            </button>
-            <span className="text-white/40">|</span>
-            <button
-              type="button"
-              onClick={() => onAdjustTrim('end', 2)}
-              className="hover:text-white px-1 cursor-pointer"
-            >
-              +2s
-            </button>
-          </div>
-
-          <span className="px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md border border-white/10 text-[10px] font-mono text-slate-300 tabular-nums">
-            {clip.duration_seconds.toFixed(0)}s
+          <span className="rounded-md bg-black/60 px-2 py-1 text-[11px] font-semibold text-white tabular-nums">
+            {formatClock(clip.duration_seconds)}
           </span>
         </div>
       </div>
 
-      {/* 3. BOTTOM BAR: Editable 1-Line Title + Solid "Download MP4" CTA + Secondary Icon Row */}
-      <div className="p-4 space-y-3 bg-[#121723]">
-        {/* Short Editable Title (1 Line) */}
-        <input
-          type="text"
-          value={clip.title}
-          onChange={(e) => onChangeTitle(e.target.value)}
-          aria-label="Clip title"
-          className="w-full bg-transparent text-sm font-semibold text-white truncate border-b border-transparent hover:border-white/15 focus:border-[#7C3AED] focus:outline-none pb-0.5 transition-colors"
-        />
+      <div className="p-3.5 space-y-3">
+        <div className="space-y-0.5">
+          <input
+            type="text"
+            value={clip.title}
+            onChange={(e) => onChangeTitle(e.target.value)}
+            aria-label="Clip title"
+            className="w-full bg-transparent text-sm font-semibold text-ink truncate rounded px-1 -mx-1 hover:bg-surface-2 focus:bg-surface-2 focus:outline-none transition-colors"
+          />
+          <div className="flex items-center justify-between text-xs text-ink-muted tabular-nums">
+            <span>
+              {formatClock(timestampToSeconds(clip.start_time))} to{' '}
+              {formatClock(timestampToSeconds(clip.end_time))}
+            </span>
+            <span className="inline-flex items-center gap-0.5" aria-label="Adjust length">
+              <button
+                type="button"
+                onClick={() => onAdjustTrim('start', -2)}
+                title="Start 2 seconds earlier"
+                className="rounded px-1.5 py-0.5 hover:bg-surface-2 hover:text-ink cursor-pointer"
+              >
+                −2s
+              </button>
+              <button
+                type="button"
+                onClick={() => onAdjustTrim('end', 2)}
+                title="End 2 seconds later"
+                className="rounded px-1.5 py-0.5 hover:bg-surface-2 hover:text-ink cursor-pointer"
+              >
+                +2s
+              </button>
+            </span>
+          </div>
+        </div>
 
-        {/* Primary CTA Button + Secondary Icon Row */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={handleDownloadClip}
             disabled={isDownloading}
-            className="flex-1 h-9 px-3 rounded-xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm shadow-[#7C3AED]/30 transition-all cursor-pointer disabled:opacity-60"
+            className="flex-1 h-9 px-3 rounded-lg bg-accent hover:bg-accent-hover text-on-accent text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
           >
             {isDownloading ? (
               <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Rendering...</span>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Rendering</span>
               </>
             ) : downloadedDone ? (
               <>
-                <Check className="w-3.5 h-3.5" />
-                <span>Saved MP4</span>
+                <Check className="w-4 h-4" />
+                <span>Saved</span>
               </>
             ) : (
               <>
-                <Download className="w-3.5 h-3.5" />
-                <span>Download MP4</span>
+                <Download className="w-4 h-4" />
+                <span>Download</span>
               </>
             )}
           </button>
 
-          {/* Secondary Icon Row for Power Users: ✏️ Edit Captions, 🎨 Style Captions, 📊 Score Breakdown */}
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => onOpenModal('transcript')}
-              title="Edit Captions"
-              aria-label="Edit Captions"
-              className="w-9 h-9 rounded-xl border border-white/10 bg-[#0B0F17] hover:border-[#7C3AED] hover:text-white text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
+          <button
+            type="button"
+            onClick={() => onOpenModal('transcript')}
+            title="Edit captions"
+            aria-label="Edit captions"
+            className="w-9 h-9 rounded-lg border border-line text-ink-muted hover:text-ink hover:bg-surface-2 flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
 
+          <div className="relative">
             <button
               type="button"
-              onClick={() => onOpenModal('style')}
-              title="Style Captions"
-              aria-label="Style Captions"
-              className="w-9 h-9 rounded-xl border border-white/10 bg-[#0B0F17] hover:border-[#7C3AED] hover:text-white text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-label="More actions"
+              aria-expanded={menuOpen}
+              className="w-9 h-9 rounded-lg border border-line text-ink-muted hover:text-ink hover:bg-surface-2 flex items-center justify-center transition-colors cursor-pointer"
             >
-              <Palette className="w-3.5 h-3.5" />
+              <MoreHorizontal className="w-4 h-4" />
             </button>
-
-            <button
-              type="button"
-              onClick={() => onOpenModal('insights')}
-              title="Score Breakdown"
-              aria-label="Score Breakdown"
-              className="w-9 h-9 rounded-xl border border-white/10 bg-[#0B0F17] hover:border-[#7C3AED] hover:text-white text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onOpenModal('publish')}
-              title="Publish Short"
-              aria-label="Publish Short"
-              className="w-9 h-9 rounded-xl border border-white/10 bg-[#0B0F17] hover:border-[#7C3AED] hover:text-white text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-            </button>
+            {menuOpen && (
+              <div
+                role="menu"
+                onMouseLeave={() => setMenuOpen(false)}
+                className="absolute right-0 bottom-11 z-30 w-44 rounded-lg border border-line bg-surface p-1 shadow-lg"
+              >
+                {(
+                  [
+                    ['style', 'Caption style', Palette],
+                    ['insights', 'Why this clip', BarChart3],
+                  ] as const
+                ).map(([modal, label, Icon]) => (
+                  <button
+                    key={modal}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onOpenModal(modal);
+                    }}
+                    className="w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-sm text-ink hover:bg-surface-2 cursor-pointer"
+                  >
+                    <Icon className="w-4 h-4 text-ink-muted" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
+    </article>
+  );
+}
+
+function DesktopSettings({
+  info,
+  onChange,
+}: {
+  info: DesktopInfo;
+  onChange: (info: DesktopInfo) => void;
+}) {
+  const [openrouter, setOpenrouter] = useState('');
+  const [gemini, setGemini] = useState('');
+  const [folder, setFolder] = useState(info.output_dir);
+  const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
+
+  const post = async (path: string, body: object, done: string) => {
+    setMessage(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await readErrorDetail(res));
+      onChange(await res.json());
+      setMessage({ text: done });
+    } catch (err: unknown) {
+      setMessage({ text: err instanceof Error ? err.message : String(err), error: true });
+    }
+  };
+
+  const inputClass =
+    'w-full h-9 px-3 rounded-lg bg-canvas border border-line text-sm placeholder:text-ink-subtle focus:outline-none focus:border-accent';
+
+  return (
+    <div className="space-y-4 pb-5 border-b border-line">
+      <form
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          post('/api/desktop/keys', { openrouter, gemini }, 'Keys saved').then(() => {
+            setOpenrouter('');
+            setGemini('');
+          });
+        }}
+      >
+        <p className="text-sm font-medium">API keys</p>
+        <label className="block space-y-1">
+          <span className="text-xs text-ink-muted">
+            OpenRouter {info.keys.openrouter ? '(saved)' : '(needed to pick clips)'}
+          </span>
+          <input
+            type="password"
+            autoComplete="off"
+            value={openrouter}
+            onChange={(e) => setOpenrouter(e.target.value)}
+            placeholder={info.keys.openrouter ? 'Paste a new key to replace it' : 'sk-or-...'}
+            className={inputClass}
+          />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-ink-muted">
+            Gemini {info.keys.gemini ? '(saved)' : '(optional)'}
+          </span>
+          <input
+            type="password"
+            autoComplete="off"
+            value={gemini}
+            onChange={(e) => setGemini(e.target.value)}
+            placeholder={info.keys.gemini ? 'Paste a new key to replace it' : 'Optional'}
+            className={inputClass}
+          />
+        </label>
+        <p className="text-xs text-ink-subtle">Stored in Windows Credential Manager on this PC.</p>
+        <button
+          type="submit"
+          disabled={!openrouter.trim() && !gemini.trim()}
+          className="h-9 px-3 rounded-lg border border-line text-sm font-medium hover:bg-surface-2 cursor-pointer disabled:opacity-40 disabled:cursor-default"
+        >
+          Save keys
+        </button>
+      </form>
+
+      <form
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          post('/api/desktop/output-dir', { path: folder }, 'Folder saved');
+        }}
+      >
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">Save clips to</span>
+          <input value={folder} onChange={(e) => setFolder(e.target.value)} className={inputClass} />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={folder.trim() === info.output_dir}
+            className="h-9 px-3 rounded-lg border border-line text-sm font-medium hover:bg-surface-2 cursor-pointer disabled:opacity-40 disabled:cursor-default"
+          >
+            Save folder
+          </button>
+          <button
+            type="button"
+            onClick={() => showInFolder()}
+            className="h-9 px-3 rounded-lg text-sm text-ink-muted hover:text-ink hover:bg-surface-2 cursor-pointer"
+          >
+            Open folder
+          </button>
+        </div>
+      </form>
+      {message && (
+        <p role="status" className={`text-xs ${message.error ? 'text-danger' : 'text-success'}`}>
+          {message.text}
+        </p>
+      )}
     </div>
   );
 }
@@ -921,13 +1045,13 @@ function MinimalVerticalClipCard({
 export default function ClipperStudio() {
   // 3-Step Linear Workflow State ('import' -> 'processing' -> 'results')
   const [step, setStep] = useState<WorkflowStep>('import');
-  const [importTab, setImportTab] = useState<string>('upload');
 
   // Source Media State
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoFileUrl, setVideoFileUrl] = useState<string | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState<string>('');
   const [sourceVideoId, setSourceVideoId] = useState<string | null>(null);
+  const [sourceDuration, setSourceDuration] = useState<number>(0);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [maxClips, setMaxClips] = useState<number>(10);
   const [analysisEngine, setAnalysisEngine] = useState<'transcript' | 'gemini'>(
@@ -939,7 +1063,7 @@ export default function ClipperStudio() {
   // Processing Progress State (Step 2)
   const [progressPct, setProgressPct] = useState<number>(0);
   const [progressStageLabel, setProgressStageLabel] = useState<string>(
-    'Analyzing viral hooks...'
+    'Getting started'
   );
 
   // Advanced Settings (Hidden inside top-right gear icon)
@@ -983,7 +1107,27 @@ export default function ClipperStudio() {
       setLayoutError(err instanceof Error ? err.message : String(err));
     }
   };
-  const [enableAudioDucking, setEnableAudioDucking] = useState<boolean>(true);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  const [savedNotice, setSavedNotice] = useState<{ count: number; path: string | null } | null>(null);
+  const [desktopInfo, setDesktopInfo] = useState<DesktopInfo | null>(null);
+
+  useEffect(() => {
+    if (!IS_DESKTOP) return;
+    let timer = 0;
+    const load = () =>
+      fetch(`${BACKEND_URL}/api/desktop/info`)
+        .then((r) => r.json())
+        .then((info: DesktopInfo) => {
+          setDesktopInfo(info);
+          // Keep checking while the speech model downloads on first run
+          if (!info.whisper_ready && !info.whisper_error) timer = window.setTimeout(load, 4000);
+        })
+        .catch(() => {
+          timer = window.setTimeout(load, 2000);
+        });
+    load();
+    return () => window.clearTimeout(timer);
+  }, []);
   const [captionPreset, setCaptionPreset] =
     useState<CaptionPresetName>('Hormozi Pop');
 
@@ -1011,10 +1155,11 @@ export default function ClipperStudio() {
     const targetFile = fileOverride ?? videoFile;
     setStep('processing');
     setProgressPct(12);
-    setProgressStageLabel('Analyzing viral hooks...');
+    setProgressStageLabel('Getting started');
     setPipelineError(null);
 
-    const linkUrl = importTab === 'link' ? youtubeUrl.trim() : '';
+    // One input box takes either: a dropped/chosen file wins, otherwise the pasted link
+    const linkUrl = fileOverride ? '' : youtubeUrl.trim();
     if (BACKEND_URL && (linkUrl || targetFile)) {
       const useTranscript = analysisEngine === 'transcript';
       setSourceVideoId(null);
@@ -1107,6 +1252,7 @@ export default function ClipperStudio() {
         );
         setActiveClipId(data.clips[0].clip_id);
         setSourceVideoId(data.video_id ?? null);
+        setSourceDuration(Number(data.duration_seconds) || 0);
         setProgressPct(100);
         setStep('results');
       } catch (err: unknown) {
@@ -1138,7 +1284,7 @@ export default function ClipperStudio() {
             targetFile?.name ||
             (youtubeUrl ? `YouTube: ${youtubeUrl}` : 'ClipperX Session'),
           videoDurationSeconds: 1800,
-          youtubeUrl: importTab === 'link' ? youtubeUrl : '',
+          youtubeUrl: youtubeUrl.trim(),
           transcriptContext: '',
           selectedModel,
           frames: [],
@@ -1177,6 +1323,34 @@ export default function ClipperStudio() {
     if (dropped) {
       handleSelectFile(dropped);
     }
+  };
+
+  const handleDownloadSelected = async () => {
+    if (!BACKEND_URL || !sourceVideoId) {
+      window.alert(NO_SOURCE_MESSAGE);
+      return;
+    }
+    const queue = rankedClips.filter((c) => batchSelectedClipIds.includes(c.clip_id));
+    const failed: string[] = [];
+    let saved = 0;
+    for (let i = 0; i < queue.length; i++) {
+      setBatchProgress({ done: i, total: queue.length });
+      try {
+        const savedTo = await renderAndSaveClip(queue[i], sourceVideoId, {
+          burnInCaptions,
+          dynamicZoom,
+          captionPreset,
+          exportLayout,
+        });
+        if (savedTo) saved += 1;
+      } catch {
+        failed.push(queue[i].title);
+      }
+    }
+    setBatchProgress(null);
+    setBatchSelectedClipIds([]);
+    if (saved) setSavedNotice({ count: saved, path: null });
+    if (failed.length) window.alert(`Couldn't render: ${failed.join(', ')}`);
   };
 
   const handleResetToStep1 = () => {
@@ -1234,304 +1408,320 @@ export default function ClipperStudio() {
     );
   };
 
-  const handleDownloadPythonApp = () => {
-    const blob = new Blob([STREAMLIT_APP_PY_CODE], {
-      type: 'text/x-python;charset=utf-8',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'app.py';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.setTimeout(() => URL.revokeObjectURL(url), 500);
-  };
+  const rankedClips = [...clips].sort((a, b) => b.virality_score - a.virality_score);
+  const timelineDuration = Math.max(
+    sourceDuration,
+    ...clips.map((c) => timestampToSeconds(c.end_time))
+  );
+  const isLinkRun = !videoFile || Boolean(youtubeUrl.trim());
+  const processingSteps = [
+    isLinkRun ? 'Download the video' : 'Upload the video',
+    'Transcribe the audio',
+    'Pick the best moments',
+  ];
+  const stageText = progressStageLabel.toLowerCase();
+  const currentProcessingStep = /pick|gemini|watching/.test(stageText)
+    ? 2
+    : /transcrib/.test(stageText)
+      ? 1
+      : 0;
 
   return (
-    <div className="min-h-screen bg-[#0B0F17] text-white flex flex-col selection:bg-[#7C3AED] selection:text-white">
-      {/* =====================================================================
-          MINIMALIST HEADER BAR
-          Logo on left, subtle Advanced Settings gear icon on right
-         ===================================================================== */}
-      <header className="h-16 border-b border-white/5 px-6 flex items-center justify-between max-w-6xl w-full mx-auto">
-        <button
-          type="button"
-          onClick={handleResetToStep1}
-          className="flex items-center gap-2.5 cursor-pointer group"
-        >
-          <div className="w-8 h-8 rounded-xl bg-[#7C3AED] flex items-center justify-center shadow-md shadow-[#7C3AED]/30 group-hover:scale-105 transition-transform">
-            <Scissors className="w-4 h-4 text-white" />
-          </div>
-          <span className="text-base font-bold tracking-tight text-white">
-            ClipperX
-          </span>
-        </button>
+    <div className="min-h-screen bg-canvas text-ink flex flex-col">
+      <header className="h-14 border-b border-line">
+        <div className="h-full max-w-6xl mx-auto px-5 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleResetToStep1}
+            className="flex items-center gap-2 rounded-md cursor-pointer"
+            aria-label="ClipperX home"
+          >
+            <span className="w-7 h-7 rounded-md bg-accent text-on-accent flex items-center justify-center">
+              <Scissors className="w-4 h-4" />
+            </span>
+            <span className="text-[15px] font-semibold tracking-tight">ClipperX</span>
+          </button>
 
-        <div className="flex items-center gap-2">
-          {step === 'results' && (
-            <>
-              <button
-                type="button"
-                onClick={() => setActiveModal('audio')}
-                title="Audio & Ducking Studio"
-                aria-label="Audio Studio"
-                className="h-9 px-3 rounded-xl border border-white/10 bg-[#121723] hover:border-[#7C3AED] text-xs font-medium text-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Music className="w-3.5 h-3.5 text-[#7C3AED]" />
-                <span className="hidden sm:inline">Audio</span>
-              </button>
-
+          <div className="flex items-center gap-1.5">
+            {step === 'results' && (
               <button
                 type="button"
                 onClick={handleResetToStep1}
-                className="h-9 px-3 rounded-xl border border-white/10 bg-[#121723] hover:border-[#7C3AED] text-xs font-medium text-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="h-9 px-3 rounded-lg text-sm font-medium text-ink-muted hover:text-ink hover:bg-surface-2 flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5 text-[#7C3AED]" />
-                <span>New Video</span>
+                <Plus className="w-4 h-4" />
+                New video
               </button>
-            </>
-          )}
-
-          {/* Subtle Gear Icon ("Advanced Settings") */}
-          <button
-            type="button"
-            onClick={() => setActiveModal('settings')}
-            title="Advanced Settings"
-            aria-label="Advanced Settings"
-            className="w-9 h-9 rounded-xl border border-white/10 bg-[#121723] hover:border-[#7C3AED] text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setActiveModal('settings')}
+              className="h-9 px-3 rounded-lg text-sm font-medium text-ink-muted hover:text-ink hover:bg-surface-2 flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Settings className="w-4 h-4" />
+              Settings
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* =====================================================================
-          SINGLE-COLUMN LINEAR WORKFLOW CONTAINER (Step 1 -> Step 2 -> Step 3)
-         ===================================================================== */}
-      <main className="flex-1 w-full max-w-5xl mx-auto px-6 py-8 flex flex-col justify-center">
-        <AnimatePresence mode="wait">
-          {/* =================================================================
-              STEP 1: HERO & IMPORT ZONE (State: No Video Uploaded)
-             ================================================================= */}
-          {step === 'import' && (
-            <motion.div
-              key="step-import"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.22 }}
-              className="min-h-[70vh] flex flex-col items-center justify-center text-center max-w-xl mx-auto w-full"
+      <main className="flex-1 w-full max-w-6xl mx-auto px-5 py-8 flex flex-col">
+        {step === 'import' && (
+          <section className="flex-1 flex flex-col items-center justify-center w-full max-w-2xl mx-auto -mt-8">
+            <h1 className="text-[32px] sm:text-[40px] leading-[1.1] font-semibold tracking-tight text-center text-balance">
+              Turn a long video into short clips
+            </h1>
+            <p className="mt-3 text-[15px] text-ink-muted text-center max-w-md">
+              Paste a link or drop a file. ClipperX finds the best moments, frames the
+              speaker and adds captions.
+            </p>
+
+            {pipelineError && (
+              <div
+                role="alert"
+                className="mt-6 w-full rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
+              >
+                {pipelineError}
+              </div>
+            )}
+
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              className={`mt-8 w-full rounded-2xl border bg-surface transition-colors ${
+                isDragging ? 'border-accent ring-4 ring-accent/20' : 'border-line'
+              }`}
             >
-              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight mb-8">
-                Turn Long Videos into Viral Shorts in 1 Click
-              </h1>
-
-              {pipelineError && (
-                <div
-                  role="alert"
-                  className="w-full rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (youtubeUrl.trim()) runGenerationPipeline();
+                }}
+                className="flex items-center gap-2 p-2"
+              >
+                <Link2 className="w-4 h-4 ml-3 text-ink-subtle shrink-0" aria-hidden />
+                <input
+                  type="url"
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  placeholder="Paste a video link"
+                  aria-label="Video link"
+                  className="flex-1 min-w-0 h-11 bg-transparent text-[15px] placeholder:text-ink-subtle focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!youtubeUrl.trim()}
+                  className="h-11 px-5 rounded-xl bg-accent hover:bg-accent-hover text-on-accent text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default shrink-0"
                 >
-                  {pipelineError}
-                </div>
-              )}
+                  Get clips
+                </button>
+              </form>
+              <div className="border-t border-line px-5 py-3.5 flex items-center justify-between gap-3 text-sm text-ink-muted">
+                <span>{isDragging ? 'Drop to upload' : 'Or drop a video file here'}</span>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-8 px-3 rounded-lg border border-line text-ink hover:bg-surface-2 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <CloudUpload className="w-4 h-4" />
+                  Choose file
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleSelectFile(file);
+                    e.target.value = '';
+                  }}
+                  className="hidden"
+                />
+              </div>
+            </div>
 
-              {/* Single Unified Input Box with Two Tabs: Upload | Link */}
-              <div className="w-full rounded-2xl border border-white/10 bg-[#121723] p-5 shadow-2xl">
-                <Tabs value={importTab} onValueChange={setImportTab}>
-                  <TabsList className="w-full grid grid-cols-2 mb-4 bg-[#0B0F17] p-1 rounded-xl border border-white/5">
-                    <TabsTrigger
-                      value="upload"
-                      className="rounded-lg text-xs font-semibold data-[state=active]:bg-[#7C3AED] data-[state=active]:text-white"
-                    >
-                      <CloudUpload className="w-3.5 h-3.5" />
-                      <span>Upload</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="link"
-                      className="rounded-lg text-xs font-semibold data-[state=active]:bg-[#7C3AED] data-[state=active]:text-white"
-                    >
-                      <Link2 className="w-3.5 h-3.5" />
-                      <span>Link</span>
-                    </TabsTrigger>
-                  </TabsList>
+            <button
+              type="button"
+              onClick={() => setActiveModal('settings')}
+              className="mt-4 flex flex-wrap items-center justify-center gap-1.5 text-xs text-ink-muted rounded-md px-2 py-1 hover:text-ink cursor-pointer"
+              title="Change settings"
+            >
+              {[
+                exportLayout.aspectRatio,
+                exportLayout.framing === 'auto'
+                  ? 'Auto framing'
+                  : exportLayout.framing === 'speaker'
+                    ? 'Speaker crop'
+                    : 'Fit with blur',
+                maxClips >= 40 ? 'As many clips as possible' : `Up to ${maxClips} clips`,
+                ...(exportLayout.bannerDataUrl ? ['Banner'] : []),
+                ...(exportLayout.logoDataUrl ? ['Logo'] : []),
+              ].map((chip) => (
+                <span key={chip} className="rounded-full bg-surface-2 px-2.5 py-1">
+                  {chip}
+                </span>
+              ))}
+              <span className="px-1 underline underline-offset-2">Change</span>
+            </button>
 
-                  {/* TAB 1: UPLOAD */}
-                  <TabsContent value="upload">
-                    <div
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setIsDragging(true);
-                      }}
-                      onDragLeave={() => setIsDragging(false)}
-                      onDrop={handleDrop}
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`rounded-xl border-2 border-dashed py-12 px-6 flex flex-col items-center justify-center gap-3 transition-all cursor-pointer ${
-                        isDragging
-                          ? 'border-[#7C3AED] bg-[#7C3AED]/10'
-                          : 'border-white/15 bg-[#0B0F17]/70 hover:border-[#7C3AED]/70 hover:bg-[#0B0F17]'
+            {IS_DESKTOP && desktopInfo && !desktopInfo.keys.openrouter && !desktopInfo.keys.gemini && (
+              <p className="mt-6 text-sm text-ink-muted text-center">
+                Add an OpenRouter API key to start.{' '}
+                <button
+                  type="button"
+                  onClick={() => setActiveModal('settings')}
+                  className="font-medium text-ink underline underline-offset-2 cursor-pointer"
+                >
+                  Open settings
+                </button>
+              </p>
+            )}
+            {IS_DESKTOP && desktopInfo && !desktopInfo.whisper_ready && (
+              <p className="mt-3 text-xs text-ink-subtle text-center flex items-center gap-1.5">
+                {desktopInfo.whisper_error ? (
+                  <>Couldn&rsquo;t download the speech model: {desktopInfo.whisper_error}. It will retry when you start.</>
+                ) : (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Downloading the speech model (first run only, about 480 MB)
+                  </>
+                )}
+              </p>
+            )}
+          </section>
+        )}
+
+        {step === 'processing' && (
+          <section className="flex-1 flex items-center justify-center" aria-live="polite">
+            <div className="w-full max-w-md">
+              <ol className="space-y-1">
+                {processingSteps.map((label, i) => {
+                  const state = i < currentProcessingStep ? 'done' : i === currentProcessingStep ? 'active' : 'todo';
+                  return (
+                    <li
+                      key={label}
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 ${
+                        state === 'active' ? 'bg-surface border border-line' : 'border border-transparent'
                       }`}
                     >
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleSelectFile(file);
-                        }}
-                        className="hidden"
-                      />
-                      <div className="w-14 h-14 rounded-2xl bg-[#7C3AED]/15 border border-[#7C3AED]/40 flex items-center justify-center text-[#7C3AED]">
-                        <CloudUpload className="w-7 h-7" />
-                      </div>
-                      <span className="text-sm font-semibold text-white">
-                        Drop MP4 or MOV here
-                      </span>
-                    </div>
-                  </TabsContent>
-
-                  {/* TAB 2: LINK */}
-                  <TabsContent value="link">
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        runGenerationPipeline();
-                      }}
-                      className="flex flex-col sm:flex-row gap-2.5 pt-1"
-                    >
-                      <input
-                        type="url"
-                        value={youtubeUrl}
-                        onChange={(e) => setYoutubeUrl(e.target.value)}
-                        placeholder="Paste any video link: YouTube, X, Reddit, TikTok, direct .mp4..."
-                        className="flex-1 h-11 px-4 rounded-xl bg-[#0B0F17] border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#7C3AED]"
-                      />
-                      <button
-                        type="submit"
-                        className="h-11 px-6 rounded-xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-lg shadow-[#7C3AED]/30 transition-all cursor-pointer shrink-0"
+                      <span
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
+                          state === 'done'
+                            ? 'bg-accent text-on-accent'
+                            : state === 'active'
+                              ? 'border-2 border-accent text-ink'
+                              : 'border border-line text-ink-subtle'
+                        }`}
                       >
-                        <Sparkles className="w-4 h-4" />
-                        <span>Generate Clips</span>
-                      </button>
-                    </form>
-                  </TabsContent>
-                </Tabs>
+                        {state === 'done' ? <Check className="w-3.5 h-3.5" /> : i + 1}
+                      </span>
+                      <span className={`text-sm ${state === 'todo' ? 'text-ink-subtle' : 'text-ink font-medium'}`}>
+                        {label}
+                      </span>
+                      {state === 'active' && <Loader2 className="w-4 h-4 ml-auto animate-spin text-ink-muted" />}
+                    </li>
+                  );
+                })}
+              </ol>
+              <div className="mt-6 h-1.5 rounded-full bg-surface-2 overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-[width] duration-300 ease-out"
+                  style={{ width: `${progressPct}%` }}
+                />
               </div>
+              <p className="mt-3 text-sm text-ink-muted flex justify-between gap-4">
+                <span className="truncate">{progressStageLabel}</span>
+                <span className="tabular-nums shrink-0">{progressPct}%</span>
+              </p>
+              <p className="mt-6 text-xs text-ink-subtle">
+                Long videos take a while to transcribe. You can leave this open; the clips appear
+                here when they're ready.
+              </p>
+            </div>
+          </section>
+        )}
 
-              {/* 1-Click Instant Demo Trigger for First-Time Visitors */}
-              <button
-                type="button"
-                onClick={() => runGenerationPipeline()}
-                className="mt-5 text-xs font-medium text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-[#7C3AED]" />
-                <span>Or try instant sample video</span>
-              </button>
-            </motion.div>
-          )}
+        {step === 'results' && (
+          <section className="space-y-6 pb-24">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  {clips.length} {clips.length === 1 ? 'clip' : 'clips'}
+                </h2>
+                <p className="text-sm text-ink-muted">
+                  Best first. Hover to preview, click a title to rename.
+                </p>
+              </div>
+            </div>
 
-          {/* =================================================================
-              STEP 2: GENERATING STATE (State: Processing)
-             ================================================================= */}
-          {step === 'processing' && (
-            <motion.div
-              key="step-processing"
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.2 }}
-              className="min-h-[65vh] flex flex-col items-center justify-center"
-            >
-              <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#121723] p-8 shadow-2xl text-center space-y-5">
-                <div className="w-12 h-12 rounded-2xl bg-[#7C3AED]/15 border border-[#7C3AED]/40 flex items-center justify-center text-[#7C3AED] mx-auto">
-                  <Loader2 className="w-6 h-6 animate-spin" />
+            {timelineDuration > 0 && (
+              <div>
+                <div className="relative h-9 rounded-lg bg-surface-2 overflow-hidden" role="list" aria-label="Where each clip comes from in the video">
+                  {rankedClips.map((clip, i) => {
+                    const start = timestampToSeconds(clip.start_time);
+                    const end = timestampToSeconds(clip.end_time);
+                    return (
+                      <button
+                        key={clip.clip_id}
+                        type="button"
+                        role="listitem"
+                        title={`${i + 1}. ${clip.title} (${formatClock(start)} to ${formatClock(end)})`}
+                        onClick={() =>
+                          document.getElementById(`clip-${clip.clip_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        }
+                        className="absolute inset-y-1.5 rounded-sm bg-accent hover:bg-accent-hover cursor-pointer"
+                        // 1px gap on each side so back-to-back clips read as separate pieces
+                        style={{
+                          left: `calc(${(start / timelineDuration) * 100}% + 1px)`,
+                          width: `max(3px, calc(${((end - start) / timelineDuration) * 100}% - 2px))`,
+                        }}
+                      />
+                    );
+                  })}
                 </div>
-
-                <div className="space-y-1">
-                  <div className="text-base font-bold text-white">
-                    {progressStageLabel}
-                  </div>
-                  <div className="text-xs font-mono text-slate-400 tabular-nums">
-                    {progressPct}%
-                  </div>
+                <div className="mt-1.5 flex justify-between text-xs text-ink-subtle tabular-nums">
+                  <span>0:00</span>
+                  <span>{formatClock(timelineDuration)}</span>
                 </div>
+              </div>
+            )}
 
-                {/* Single Animated Progress Bar */}
-                <div className="w-full h-2 rounded-full bg-[#0B0F17] overflow-hidden border border-white/5">
-                  <motion.div
-                    className="h-full bg-[#7C3AED]"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progressPct}%` }}
-                    transition={{ duration: 0.2, ease: 'easeOut' }}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {rankedClips.map((clip) => (
+                <div key={clip.clip_id} id={`clip-${clip.clip_id}`}>
+                  <MinimalVerticalClipCard
+                    clip={clip}
+                    videoFileUrl={videoFileUrl}
+                    sourceVideoId={sourceVideoId}
+                    exportLayout={exportLayout}
+                    captionPreset={captionPreset}
+                    burnInCaptions={burnInCaptions}
+                    dynamicZoom={dynamicZoom}
+                    isBatchSelected={batchSelectedClipIds.includes(clip.clip_id)}
+                    onToggleBatchSelect={() =>
+                      setBatchSelectedClipIds((prev) =>
+                        prev.includes(clip.clip_id)
+                          ? prev.filter((id) => id !== clip.clip_id)
+                          : [...prev, clip.clip_id]
+                      )
+                    }
+                    onChangeTitle={(newTitle) => handleUpdateClipTitle(clip.clip_id, newTitle)}
+                    onAdjustTrim={(edge, delta) => handleAdjustClipTimestamp(clip.clip_id, edge, delta)}
+                    onOpenModal={(modalType) => {
+                      setActiveClipId(clip.clip_id);
+                      setActiveModal(modalType);
+                    }}
+                    onSaved={(path) => setSavedNotice({ count: 1, path })}
                   />
                 </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* =================================================================
-              STEP 3: RESULTS GALLERY (State: Clips Ready)
-             ================================================================= */}
-          {step === 'results' && (
-            <motion.div
-              key="step-results"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.24 }}
-              className="space-y-6 pb-20"
-            >
-              {/* Minimal Top Bar */}
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-white tracking-tight">
-                  {clips.length} Viral Shorts Ready
-                </h2>
-                <span className="text-xs text-slate-400">
-                  Preset: <strong className="text-white">{captionPreset}</strong>
-                </span>
-              </div>
-
-              {/* 3-Column 9:16 Vertical Clip Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...clips]
-                  .sort((a, b) => b.virality_score - a.virality_score)
-                  .map((clip) => (
-                    <MinimalVerticalClipCard
-                      key={clip.clip_id}
-                      clip={clip}
-                      videoFileUrl={videoFileUrl}
-                      sourceVideoId={sourceVideoId}
-                      exportLayout={exportLayout}
-                      captionPreset={captionPreset}
-                      burnInCaptions={burnInCaptions}
-                      dynamicZoom={dynamicZoom}
-                      isBatchSelected={batchSelectedClipIds.includes(
-                        clip.clip_id
-                      )}
-                      onToggleBatchSelect={() =>
-                        setBatchSelectedClipIds((prev) =>
-                          prev.includes(clip.clip_id)
-                            ? prev.filter((id) => id !== clip.clip_id)
-                            : [...prev, clip.clip_id]
-                        )
-                      }
-                      onChangeTitle={(newTitle) =>
-                        handleUpdateClipTitle(clip.clip_id, newTitle)
-                      }
-                      onAdjustTrim={(edge, delta) =>
-                        handleAdjustClipTimestamp(clip.clip_id, edge, delta)
-                      }
-                      onOpenModal={(modalType) => {
-                        setActiveClipId(clip.clip_id);
-                        setActiveModal(modalType);
-                      }}
-                    />
-                  ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
 
       {/* =====================================================================
@@ -1546,7 +1736,7 @@ export default function ClipperStudio() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setActiveModal(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 "
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -1559,7 +1749,7 @@ export default function ClipperStudio() {
                 type="button"
                 onClick={() => setActiveModal(null)}
                 aria-label="Close Transcript Editor"
-                className="sticky top-3 float-right mr-3 mt-3 z-50 w-8 h-8 rounded-lg bg-slate-900 border border-white/15 text-slate-300 hover:text-white flex items-center justify-center cursor-pointer"
+                className="sticky top-3 float-right mr-3 mt-3 z-50 w-8 h-8 rounded-lg bg-surface border border-line text-ink hover:text-ink flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1585,7 +1775,7 @@ export default function ClipperStudio() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setActiveModal(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 "
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -1598,7 +1788,7 @@ export default function ClipperStudio() {
                 type="button"
                 onClick={() => setActiveModal(null)}
                 aria-label="Close Style Picker"
-                className="sticky top-3 float-right mr-3 mt-3 z-50 w-8 h-8 rounded-lg bg-slate-900 border border-white/15 text-slate-300 hover:text-white flex items-center justify-center cursor-pointer"
+                className="sticky top-3 float-right mr-3 mt-3 z-50 w-8 h-8 rounded-lg bg-surface border border-line text-ink hover:text-ink flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1623,48 +1813,7 @@ export default function ClipperStudio() {
         onClose={() => setActiveModal(null)}
       />
 
-      {/* 4. 🚀 Social Publish Modal (`SocialPublishModal`) */}
-      <SocialPublishModal
-        clip={activeClip}
-        isOpen={activeModal === 'publish'}
-        onClose={() => setActiveModal(null)}
-      />
 
-      {/* 5. 🎵 Audio Studio Modal (`AudioStudioDrawer`) */}
-      <AnimatePresence>
-        {activeModal === 'audio' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setActiveModal(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-4xl max-h-[90vh] overflow-y-auto relative rounded-2xl"
-            >
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                aria-label="Close Audio Studio"
-                className="sticky top-3 float-right mr-3 mt-3 z-50 w-8 h-8 rounded-lg bg-slate-900 border border-white/15 text-slate-300 hover:text-white flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              <AudioStudioDrawer
-                enableAudioDucking={enableAudioDucking}
-                onToggleAudioDucking={(enabled) =>
-                  setEnableAudioDucking(enabled)
-                }
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* 6. ⚙️ Advanced Settings Modal (Triggered from top-right gear icon) */}
       <AnimatePresence>
@@ -1674,47 +1823,50 @@ export default function ClipperStudio() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setActiveModal(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex justify-end bg-overlay"
           >
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+              role="dialog"
+              aria-label="Settings"
+              initial={{ x: 32, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 32, opacity: 0 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-2xl border border-white/10 bg-[#121723] p-6 shadow-2xl space-y-5"
+              className="h-full w-full max-w-sm border-l border-line bg-surface overflow-y-auto"
             >
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <div className="flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-[#7C3AED]" />
-                  <h3 className="text-sm font-bold text-white">
-                    Advanced Settings
-                  </h3>
-                </div>
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-5 h-14">
+                <h3 className="text-[15px] font-semibold">Settings</h3>
                 <button
                   type="button"
                   onClick={() => setActiveModal(null)}
-                  className="text-slate-400 hover:text-white cursor-pointer"
+                  aria-label="Close settings"
+                  className="w-8 h-8 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-2 flex items-center justify-center cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
+              <div className="p-5 space-y-5">
+                {IS_DESKTOP && desktopInfo && (
+                  <DesktopSettings info={desktopInfo} onChange={setDesktopInfo} />
+                )}
 
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300 block">
-                    Analysis Engine
+                  <label className="text-xs font-medium text-ink block">
+                    Analysis engine
                   </label>
                   <select
                     value={analysisEngine}
                     onChange={(e) =>
                       setAnalysisEngine(e.target.value as 'transcript' | 'gemini')
                     }
-                    className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                    className="w-full h-9 px-3 rounded-xl bg-canvas border border-line text-xs text-ink focus:outline-none focus:border-line"
                   >
                     <option value="transcript">Transcript (Whisper + OpenRouter)</option>
                     <option value="gemini">Gemini watches the video</option>
                   </select>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-ink-subtle">
                     {analysisEngine === 'transcript'
                       ? 'Precise word captions from the audio, no daily quota.'
                       : 'Sees visuals too, but slow on long videos and has a daily quota.'}
@@ -1723,13 +1875,13 @@ export default function ClipperStudio() {
 
                 {analysisEngine === 'transcript' && (
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-300 block">
-                      Clip-Picking Model
+                    <label className="text-xs font-medium text-ink block">
+                      Clip-picking model
                     </label>
                     <select
                       value={llmModel}
                       onChange={(e) => setLlmModel(e.target.value)}
-                      className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                      className="w-full h-9 px-3 rounded-xl bg-canvas border border-line text-xs text-ink focus:outline-none focus:border-line"
                     >
                       {OPENROUTER_MODELS.map((m) => (
                         <option key={m.id} value={m.id}>
@@ -1743,8 +1895,8 @@ export default function ClipperStudio() {
                 <div
                   className={`space-y-1.5 ${analysisEngine === 'gemini' ? '' : 'hidden'}`}
                 >
-                  <label className="text-xs font-medium text-slate-300 block">
-                    Gemini Model
+                  <label className="text-xs font-medium text-ink block">
+                    Gemini model
                   </label>
                   <select
                     value={selectedModel}
@@ -1753,7 +1905,7 @@ export default function ClipperStudio() {
                         e.target.value as 'gemini-flash-latest' | 'gemini-pro-latest'
                       )
                     }
-                    className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                    className="w-full h-9 px-3 rounded-xl bg-canvas border border-line text-xs text-ink focus:outline-none focus:border-line"
                   >
                     <option value="gemini-flash-latest">Gemini Flash (latest)</option>
                     <option value="gemini-pro-latest">Gemini Pro (latest)</option>
@@ -1761,13 +1913,13 @@ export default function ClipperStudio() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300 block">
-                    Number of Clips
+                  <label className="text-xs font-medium text-ink block">
+                    Number of clips
                   </label>
                   <select
                     value={maxClips}
                     onChange={(e) => setMaxClips(Number(e.target.value))}
-                    className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                    className="w-full h-9 px-3 rounded-xl bg-canvas border border-line text-xs text-ink focus:outline-none focus:border-line"
                   >
                     <option value={5}>Up to 5</option>
                     <option value={10}>Up to 10</option>
@@ -1781,19 +1933,19 @@ export default function ClipperStudio() {
                   </select>
                 </div>
 
-                <div className="space-y-3 rounded-xl border border-white/10 p-3.5">
-                  <p className="text-xs font-semibold text-white">Export Layout</p>
+                <div className="space-y-3 rounded-xl border border-line p-3.5">
+                  <p className="text-xs font-semibold text-ink">Export layout</p>
 
                   <div className="grid grid-cols-2 gap-2.5">
                     <div className="space-y-1.5">
-                      <label htmlFor="layout-ratio" className="text-xs font-medium text-slate-300 block">
-                        Aspect Ratio
+                      <label htmlFor="layout-ratio" className="text-xs font-medium text-ink block">
+                        Aspect ratio
                       </label>
                       <select
                         id="layout-ratio"
                         value={exportLayout.aspectRatio}
                         onChange={(e) => updateLayout({ aspectRatio: e.target.value as ExportLayout['aspectRatio'] })}
-                        className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                        className="w-full h-9 px-3 rounded-xl bg-canvas border border-line text-xs text-ink focus:outline-none focus:border-line"
                       >
                         <option value="9:16">9:16 Shorts / Reels</option>
                         <option value="4:5">4:5 Feed</option>
@@ -1802,14 +1954,14 @@ export default function ClipperStudio() {
                       </select>
                     </div>
                     <div className="space-y-1.5">
-                      <label htmlFor="layout-framing" className="text-xs font-medium text-slate-300 block">
+                      <label htmlFor="layout-framing" className="text-xs font-medium text-ink block">
                         Framing
                       </label>
                       <select
                         id="layout-framing"
                         value={exportLayout.framing}
                         onChange={(e) => updateLayout({ framing: e.target.value as ExportLayout['framing'] })}
-                        className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                        className="w-full h-9 px-3 rounded-xl bg-canvas border border-line text-xs text-ink focus:outline-none focus:border-line"
                       >
                         <option value="auto">Auto</option>
                         <option value="speaker">Speaker crop</option>
@@ -1817,7 +1969,7 @@ export default function ClipperStudio() {
                       </select>
                     </div>
                   </div>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-ink-subtle">
                     {exportLayout.framing === 'auto'
                       ? 'People talking: crops onto the speaker. Anything else: fits the whole frame over a blur.'
                       : exportLayout.framing === 'speaker'
@@ -1826,7 +1978,7 @@ export default function ClipperStudio() {
                   </p>
 
                   <div className="space-y-1.5">
-                    <span className="text-xs font-medium text-slate-300 block">Banner</span>
+                    <span className="text-xs font-medium text-ink block">Banner</span>
                     {exportLayout.bannerDataUrl ? (
                       <div className="flex items-center gap-2">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1835,7 +1987,7 @@ export default function ClipperStudio() {
                           aria-label="Banner position"
                           value={exportLayout.bannerPosition}
                           onChange={(e) => updateLayout({ bannerPosition: e.target.value as ExportLayout['bannerPosition'] })}
-                          className="flex-1 h-8 px-2 rounded-lg bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                          className="flex-1 h-8 px-2 rounded-lg bg-canvas border border-line text-xs text-ink focus:outline-none focus:border-line"
                         >
                           <option value="bottom">Footer</option>
                           <option value="top">Header</option>
@@ -1843,13 +1995,13 @@ export default function ClipperStudio() {
                         <button
                           type="button"
                           onClick={() => updateLayout({ bannerDataUrl: null, bannerName: '' })}
-                          className="h-8 px-2.5 rounded-lg border border-white/10 text-xs text-slate-300 hover:text-white cursor-pointer"
+                          className="h-8 px-2.5 rounded-lg border border-line text-xs text-ink hover:text-ink cursor-pointer"
                         >
                           Remove
                         </button>
                       </div>
                     ) : (
-                      <label className="flex h-9 items-center justify-center rounded-xl border border-dashed border-white/15 text-xs text-slate-400 hover:text-white hover:border-[#7C3AED] cursor-pointer">
+                      <label className="flex h-9 items-center justify-center rounded-xl border border-dashed border-line text-xs text-ink-muted hover:text-ink hover:border-line cursor-pointer">
                         Upload campaign banner (PNG/JPG)
                         <input
                           type="file"
@@ -1865,7 +2017,7 @@ export default function ClipperStudio() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <span className="text-xs font-medium text-slate-300 block">Logo / Watermark</span>
+                    <span className="text-xs font-medium text-ink block">Logo or watermark</span>
                     {exportLayout.logoDataUrl ? (
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
@@ -1875,7 +2027,7 @@ export default function ClipperStudio() {
                             aria-label="Logo position"
                             value={exportLayout.logoPosition}
                             onChange={(e) => updateLayout({ logoPosition: e.target.value as ExportLayout['logoPosition'] })}
-                            className="flex-1 h-8 px-2 rounded-lg bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                            className="flex-1 h-8 px-2 rounded-lg bg-canvas border border-line text-xs text-ink focus:outline-none focus:border-line"
                           >
                             <option value="top-left">Top left</option>
                             <option value="top-right">Top right</option>
@@ -1885,12 +2037,12 @@ export default function ClipperStudio() {
                           <button
                             type="button"
                             onClick={() => updateLayout({ logoDataUrl: null, logoName: '' })}
-                            className="h-8 px-2.5 rounded-lg border border-white/10 text-xs text-slate-300 hover:text-white cursor-pointer"
+                            className="h-8 px-2.5 rounded-lg border border-line text-xs text-ink hover:text-ink cursor-pointer"
                           >
                             Remove
                           </button>
                         </div>
-                        <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                        <label className="flex items-center gap-2 text-[11px] text-ink-muted">
                           <span className="w-14">Size</span>
                           <input
                             type="range" min={0.05} max={0.4} step={0.01}
@@ -1900,7 +2052,7 @@ export default function ClipperStudio() {
                           />
                           <span className="w-9 text-right tabular-nums">{Math.round(exportLayout.logoSize * 100)}%</span>
                         </label>
-                        <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                        <label className="flex items-center gap-2 text-[11px] text-ink-muted">
                           <span className="w-14">Opacity</span>
                           <input
                             type="range" min={0.2} max={1} step={0.05}
@@ -1912,7 +2064,7 @@ export default function ClipperStudio() {
                         </label>
                       </div>
                     ) : (
-                      <label className="flex h-9 items-center justify-center rounded-xl border border-dashed border-white/15 text-xs text-slate-400 hover:text-white hover:border-[#7C3AED] cursor-pointer">
+                      <label className="flex h-9 items-center justify-center rounded-xl border border-dashed border-line text-xs text-ink-muted hover:text-ink hover:border-line cursor-pointer">
                         Upload logo (PNG with transparency works best)
                         <input
                           type="file"
@@ -1926,13 +2078,13 @@ export default function ClipperStudio() {
                       </label>
                     )}
                   </div>
-                  {layoutError && <p role="alert" className="text-[11px] text-red-400">{layoutError}</p>}
+                  {layoutError && <p role="alert" className="text-[11px] text-danger">{layoutError}</p>}
                 </div>
 
                 <div className="space-y-2.5 pt-1">
-                  <div className="flex items-center justify-between rounded-xl bg-[#0B0F17] px-3.5 py-2.5 border border-white/5">
-                    <span className="text-xs font-medium text-slate-200">
-                      Burn-in Captions
+                  <div className="flex items-center justify-between rounded-xl bg-canvas px-3.5 py-2.5 border border-line">
+                    <span className="text-xs font-medium text-ink">
+                      Burn-in captions
                     </span>
                     <Switch
                       checked={burnInCaptions}
@@ -1940,9 +2092,9 @@ export default function ClipperStudio() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-xl bg-[#0B0F17] px-3.5 py-2.5 border border-white/5">
-                    <span className="text-xs font-medium text-slate-200">
-                      Dynamic Zoom (1.12x)
+                  <div className="flex items-center justify-between rounded-xl bg-canvas px-3.5 py-2.5 border border-line">
+                    <span className="text-xs font-medium text-ink">
+                      Zoom pulse (fit framing)
                     </span>
                     <Switch
                       checked={dynamicZoom}
@@ -1951,61 +2103,83 @@ export default function ClipperStudio() {
                   </div>
 
 
-                  <div className="flex items-center justify-between rounded-xl bg-[#0B0F17] px-3.5 py-2.5 border border-white/5">
-                    <span className="text-xs font-medium text-slate-200">
-                      Audio Ducking
-                    </span>
-                    <Switch
-                      checked={enableAudioDucking}
-                      onCheckedChange={setEnableAudioDucking}
-                    />
-                  </div>
                 </div>
 
-                <div className="pt-2 border-t border-white/10 flex items-center justify-between">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDownloadPythonApp}
-                    className="text-xs cursor-pointer"
-                  >
-                    <Code2 className="w-3.5 h-3.5 text-[#7C3AED]" />
-                    <span>Export Python app.py</span>
-                  </Button>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setActiveModal(null)}
-                    className="bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs cursor-pointer"
-                  >
-                    Done
-                  </Button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="w-full h-10 rounded-lg bg-accent hover:bg-accent-hover text-on-accent text-sm font-semibold transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 7. Batch Export Drawer (Appears ONLY in Step 3 when user checks 1+ clip cards) */}
+      {savedNotice && (
+        <div role="status" className="fixed bottom-5 left-5 z-40 flex items-center gap-3 rounded-xl border border-line bg-surface pl-4 pr-2 py-2 shadow-lg">
+          <Check className="w-4 h-4 text-success" />
+          <span className="text-sm">
+            {savedNotice.count === 1 ? 'Clip saved' : `${savedNotice.count} clips saved`}
+          </span>
+          <button
+            type="button"
+            onClick={() => showInFolder(savedNotice.path)}
+            className="h-8 px-3 rounded-lg text-sm font-medium hover:bg-surface-2 cursor-pointer"
+          >
+            Show in folder
+          </button>
+          <button
+            type="button"
+            onClick={() => setSavedNotice(null)}
+            aria-label="Dismiss"
+            className="w-8 h-8 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-2 flex items-center justify-center cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {step === 'results' && batchSelectedClipIds.length > 0 && (
-        <BatchExportDrawer
-          clips={clips}
-          selectedClipIds={batchSelectedClipIds}
-          onToggleSelectClip={(id) =>
-            setBatchSelectedClipIds((prev) =>
-              prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-            )
-          }
-          onSelectAllClips={() =>
-            setBatchSelectedClipIds(clips.map((c) => c.clip_id))
-          }
-          onDeselectAll={() => setBatchSelectedClipIds([])}
-          captionPreset={captionPreset}
-          enableKaraoke={burnInCaptions}
-        />
+        <div className="fixed bottom-5 inset-x-0 z-40 flex justify-center px-4">
+          <div className="flex items-center gap-2 rounded-xl border border-line bg-surface pl-4 pr-2 py-2 shadow-lg">
+            <span className="text-sm font-medium tabular-nums">
+              {batchProgress
+                ? `Rendering ${batchProgress.done + 1} of ${batchProgress.total}`
+                : `${batchSelectedClipIds.length} selected`}
+            </span>
+            {!batchProgress && (
+              <button
+                type="button"
+                onClick={() => setBatchSelectedClipIds(rankedClips.map((c) => c.clip_id))}
+                className="h-9 px-3 rounded-lg text-sm text-ink-muted hover:text-ink hover:bg-surface-2 cursor-pointer"
+              >
+                Select all
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleDownloadSelected}
+              disabled={Boolean(batchProgress)}
+              className="h-9 px-4 rounded-lg bg-accent hover:bg-accent-hover text-on-accent text-sm font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-70"
+            >
+              {batchProgress ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {batchProgress ? 'Downloading' : 'Download selected'}
+            </button>
+            {!batchProgress && (
+              <button
+                type="button"
+                onClick={() => setBatchSelectedClipIds([])}
+                aria-label="Clear selection"
+                className="w-9 h-9 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-2 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -8,15 +8,15 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default:
-          'border-violet-500/30 bg-violet-500/15 text-violet-200',
+          'border-accent bg-accent-soft text-ink',
         gradient:
-          'border-violet-400/30 bg-gradient-to-r from-violet-600/30 to-cyan-500/30 text-cyan-200',
+          'border-accent bg-accent text-on-accent',
         green:
-          'border-emerald-500/40 bg-emerald-500/15 text-emerald-300',
+          'border-success/40 bg-success/10 text-success',
         yellow:
-          'border-amber-500/40 bg-amber-500/15 text-amber-300',
+          'border-accent bg-accent-soft text-ink',
         outline:
-          'border-slate-700 bg-slate-900/80 text-slate-300',
+          'border-line bg-surface text-ink',
       },
     },
     defaultVariants: {
