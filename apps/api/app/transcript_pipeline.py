@@ -21,7 +21,21 @@ import numpy as np
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "small")
 WHISPER_BATCH = int(os.environ.get("WHISPER_BATCH", "8"))
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4.1-flash")
+# "auto:free" walks FREE_MODEL_CHAIN (see pick_clips). Order from a test on an 85-minute
+# podcast transcript: Nemotron 3 Ultra picked the same moments as paid DeepSeek, as full
+# stories across the whole episode (69 s); Nemotron 3.5 Super picked them in 6 s but tighter;
+# openrouter/free routes to whichever free model is up; dots-3 clustered its picks early.
+AUTO_FREE = "auto:free"
+FREE_MODEL_CHAIN = [
+    m.strip()
+    for m in os.environ.get(
+        "FREE_MODEL_CHAIN",
+        "nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3.5-super-vl:free,"
+        "openrouter/free,dots-studio/dots-3-note-preview:free",
+    ).split(",")
+    if m.strip()
+]
+DEFAULT_OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", AUTO_FREE)
 
 CLIP_SELECTION_PROMPT = """You are an expert short-form video editor. Below is a timestamped transcript of a long video. Each line is "[start-end] text" in seconds.
 
@@ -218,6 +232,29 @@ def select_clips(segments: List[dict], max_clips: int, model: Optional[str]) -> 
         return json.loads(content[start : end + 1])["clips"]
     except (ValueError, KeyError, TypeError):
         raise PipelineError(f"{model_name} returned malformed clips: {content[:200]}")
+
+
+def pick_clips(segments: List[dict], max_clips: int, model: Optional[str]) -> tuple:
+    """
+    Returns (candidates, model that answered). With AUTO_FREE, tries the free models in
+    FREE_MODEL_CHAIN order: free models have daily limits and get busy, so when one is
+    rate-limited or returns nothing usable the next one answers instead.
+    """
+    if model != AUTO_FREE:
+        return select_clips(segments, max_clips, model), model or DEFAULT_OPENROUTER_MODEL
+    failures = []
+    for candidate in FREE_MODEL_CHAIN:
+        try:
+            clips = select_clips(segments, max_clips, candidate)
+            if clips:
+                return clips, candidate
+            failures.append(f"{candidate}: no clips")
+        except PipelineError as exc:
+            failures.append(str(exc)[:160])
+    raise PipelineError(
+        "Every free model was busy or failed. Try again in a few minutes, or pick a paid model. "
+        + " | ".join(failures)
+    )
 
 
 def _timestamp(total: float) -> str:

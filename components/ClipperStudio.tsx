@@ -179,12 +179,15 @@ const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || '').replace(/\/$/, '
 const IS_DESKTOP = process.env.NEXT_PUBLIC_CLIPPERX_DESKTOP === '1';
 
 // Clip pickers for the transcript engine (ids from https://openrouter.ai/models)
-const OPENROUTER_MODELS = [
-  { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash (cheapest)' },
-  { id: 'anthropic/claude-haiku-5.5', label: 'Claude Haiku 5.5' },
-  { id: 'anthropic/claude-sonnet-5.5', label: 'Claude Sonnet 5.5 (best picks)' },
-  { id: 'openai/gpt-5.6-luna', label: 'GPT-5.6 Luna' },
-  { id: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B (free, rate-limited)' },
+const OPENROUTER_MODELS: { id: string; label: string; free: boolean }[] = [
+  // auto:free tries the backend's free-model chain in order and falls back when one is busy
+  { id: 'auto:free', label: 'Best free model (auto)', free: true },
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', label: 'Nemotron 3 Ultra: fuller stories', free: true },
+  { id: 'nvidia/nemotron-3.5-super-vl:free', label: 'Nemotron 3.5 Super: fastest', free: true },
+  { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash (about $0.0003 a video)', free: false },
+  { id: 'anthropic/claude-haiku-5.5', label: 'Claude Haiku 5.5', free: false },
+  { id: 'anthropic/claude-sonnet-5.5', label: 'Claude Sonnet 5.5 (best picks)', free: false },
+  { id: 'openai/gpt-5.6-luna', label: 'GPT-5.6 Luna', free: false },
 ];
 
 async function readErrorDetail(response: Response): Promise<string> {
@@ -345,7 +348,7 @@ type RenderOptions = {
 };
 
 function clipFileName(clip: ViralClipSegment): string {
-  const title = clip.title.replace(/[<>:"/\|?* -]/g, '').trim().slice(0, 70) || 'clip';
+  const title = clip.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim().slice(0, 70) || 'clip';
   return `${String(clip.clip_id).padStart(2, '0')} - ${title}.mp4`;
 }
 
@@ -1052,6 +1055,7 @@ export default function ClipperStudio() {
   const [youtubeUrl, setYoutubeUrl] = useState<string>('');
   const [sourceVideoId, setSourceVideoId] = useState<string | null>(null);
   const [sourceDuration, setSourceDuration] = useState<number>(0);
+  const [pickedBy, setPickedBy] = useState<string>('');
   const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [maxClips, setMaxClips] = useState<number>(10);
   const [analysisEngine, setAnalysisEngine] = useState<'transcript' | 'gemini'>(
@@ -1253,6 +1257,7 @@ export default function ClipperStudio() {
         setActiveClipId(data.clips[0].clip_id);
         setSourceVideoId(data.video_id ?? null);
         setSourceDuration(Number(data.duration_seconds) || 0);
+        setPickedBy(typeof data.model === 'string' ? data.model : '');
         setProgressPct(100);
         setStep('results');
       } catch (err: unknown) {
@@ -1654,6 +1659,14 @@ export default function ClipperStudio() {
                 </h2>
                 <p className="text-sm text-ink-muted">
                   Best first. Hover to preview, click a title to rename.
+                  {pickedBy && (
+                    <span className="text-ink-subtle">
+                      {' '}Picked by{' '}
+                      {OPENROUTER_MODELS.find((m) => m.id === pickedBy)?.label.split(':')[0] ||
+                        pickedBy.split('/').pop()?.replace(':free', ' (free)')}
+                      .
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -1883,12 +1896,25 @@ export default function ClipperStudio() {
                       onChange={(e) => setLlmModel(e.target.value)}
                       className="w-full h-9 px-3 rounded-xl bg-canvas border border-line text-xs text-ink focus:outline-none focus:border-line"
                     >
-                      {OPENROUTER_MODELS.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.label}
-                        </option>
-                      ))}
+                      <optgroup label="Free">
+                        {OPENROUTER_MODELS.filter((m) => m.free).map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Paid (needs OpenRouter credit)">
+                        {OPENROUTER_MODELS.filter((m) => !m.free).map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </optgroup>
                     </select>
+                    <p className="text-[11px] text-ink-subtle">
+                      Free models have a daily limit and can be busy; auto switches to the next
+                      free one when that happens.
+                    </p>
                   </div>
                 )}
 
