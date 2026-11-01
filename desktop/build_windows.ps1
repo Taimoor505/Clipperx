@@ -41,10 +41,12 @@ open(r'$yunet', 'wb').write(data)
     --paths "$root\apps\api" `
     --add-data "$root\desktop\web;web" `
     --add-data "$root\desktop\models;models" `
+    --add-data "$root\apps\api\fonts;fonts" `
     --add-binary "$root\desktop\bin\ffmpeg.exe;bin" `
     --add-binary "$root\desktop\bin\ffprobe.exe;bin" `
     --hidden-import app.main `
     --hidden-import app.reframe `
+    --hidden-import app.edits `
     --hidden-import app.transcript_pipeline `
     --collect-data faster_whisper `
     --collect-binaries ctranslate2 `

@@ -60,6 +60,9 @@ def _prepare_environment() -> None:
         "HF_HOME": str(DATA_DIR / "models"),
         "TRANSCRIPT_CACHE_DIR": str(DATA_DIR / "transcripts"),
         "YUNET_MODEL": str(_bundled("models", "face_detection_yunet_2023mar.onnx")),
+        "CLIPPERX_ASSETS_DIR": str(DATA_DIR / "assets"),
+        "CLIPPERX_PRESETS_FILE": str(DATA_DIR / "presets.json"),
+        "CLIPPERX_FONTS_DIR": str(_bundled("fonts")),
     })
     ffmpeg_dir = _bundled("bin")
     if (ffmpeg_dir / "ffmpeg.exe").exists():
@@ -183,7 +186,8 @@ def main() -> int:
     # A second launch just opens another window onto the running app
 
     webview.create_window("ClipperX", BASE_URL, width=1280, height=840, min_size=(480, 560))
-    webview.start()
+    # Not private: the window keeps its settings (layout, caption look) between launches
+    webview.start(private_mode=False, storage_path=str(DATA_DIR / "webview"))
     return 0
 
 

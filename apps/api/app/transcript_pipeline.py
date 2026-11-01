@@ -8,6 +8,7 @@ timestamps rather than model guesses, and the LLM only reads a compact transcrip
 
 import hashlib
 import json
+import re
 import os
 import subprocess
 import time
@@ -40,14 +41,15 @@ DEFAULT_OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", AUTO_FREE)
 CLIP_SELECTION_PROMPT = """You are an expert short-form video editor. Below is a timestamped transcript of a long video. Each line is "[start-end] text" in seconds.
 
 Pick up to {max_clips} standalone segments that would perform well as vertical Shorts:
-1. Duration: ideally 30 to 60 seconds. A complete moment may be as short as 15 seconds; never pad a clip with unrelated speech to reach 30. Start and end on line boundaries from the transcript.
+1. Duration: {length_rule} Never pad a clip with unrelated speech to reach a length. Start and end on line boundaries from the transcript.
 2. Hook: the first 5 seconds open with a bold claim, surprising fact, strong opinion, or emotional moment.
 3. Standalone: the clip makes sense without the rest of the video.
 4. Clips must not overlap. Spread them across the whole video.
 
 Return ONLY a JSON object in this exact shape:
-{"clips": [{"start_seconds": 12.3, "end_seconds": 58.1, "title": "Catchy hook title", "virality_score": 92, "hook_transcript": "First sentence spoken", "reasoning": "Why this moment works"}]}
+{"clips": [{"start_seconds": 12.3, "end_seconds": 58.1, "title": "Catchy hook title", "virality_score": 92, "hook_transcript": "First sentence spoken", "reasoning": "Why this moment works", "broll": [{"at_seconds": 20.5, "show": "Photo of the product being mentioned"}]}]}
 virality_score is 0-100. Order clips from highest to lowest virality_score.
+broll: up to 3 moments inside the clip where a real photo or video would illustrate what is said (a product, place, person, number or event mentioned). "show" says concretely what to show. Use an empty list if nothing fits.
 
 TRANSCRIPT:
 {transcript}"""
@@ -74,7 +76,7 @@ def _get_whisper():
     return _whisper
 
 
-def transcribe(video_path: Path, workdir: Path) -> List[dict]:
+def transcribe(video_path: Path, workdir: Path, vocabulary: Optional[List[str]] = None) -> List[dict]:
     """Returns segments [{start, end, text, words: [{word, start, end}]}] in absolute seconds."""
     audio_path = workdir / "audio.wav"
     proc = subprocess.run(
@@ -95,8 +97,12 @@ def transcribe(video_path: Path, workdir: Path) -> List[dict]:
         pcm = wav.readframes(wav.getnframes())
     samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
 
+    # Names and terms the user listed (guests, brands) steer Whisper's spelling
+    terms = ", ".join(vocabulary or [])
     segments, _info = _get_whisper().transcribe(
-        samples, word_timestamps=True, vad_filter=True, batch_size=WHISPER_BATCH
+        samples, word_timestamps=True, vad_filter=True, batch_size=WHISPER_BATCH,
+        initial_prompt=f"Names and terms: {terms}." if terms else None,
+        hotwords=terms or None,
     )
     result = []
     for seg in segments:
@@ -138,21 +144,30 @@ def _fingerprint(video_path: Path) -> str:
     return digest.hexdigest()[:32]
 
 
-def _transcript_path(video_path: Path) -> Path:
-    return _transcript_dir() / f"{_fingerprint(video_path)}.{WHISPER_MODEL}.json"
+def parse_vocabulary(text: str) -> List[str]:
+    """'Greg LaVecchia, Bloom Nutrition' -> ['Greg LaVecchia', 'Bloom Nutrition']."""
+    return [t.strip() for t in re.split(r"[,\n]", text or "") if t.strip()][:60]
 
 
-def cached_transcript(video_path: Path) -> Optional[List[dict]]:
+def _transcript_path(video_path: Path, vocabulary: Optional[List[str]] = None) -> Path:
+    # A different names list can change the spelling, so it gets its own saved transcript
+    suffix = ""
+    if vocabulary:
+        suffix = "." + hashlib.sha256("|".join(vocabulary).lower().encode()).hexdigest()[:8]
+    return _transcript_dir() / f"{_fingerprint(video_path)}.{WHISPER_MODEL}{suffix}.json"
+
+
+def cached_transcript(video_path: Path, vocabulary: Optional[List[str]] = None) -> Optional[List[dict]]:
     """The saved transcript of this exact video, so picking clips again skips Whisper."""
     try:
-        return json.loads(_transcript_path(video_path).read_text(encoding="utf-8"))
+        return json.loads(_transcript_path(video_path, vocabulary).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
 
 
-def save_transcript(video_path: Path, segments: List[dict]) -> None:
+def save_transcript(video_path: Path, segments: List[dict], vocabulary: Optional[List[str]] = None) -> None:
     try:
-        _transcript_path(video_path).write_text(json.dumps(segments), encoding="utf-8")
+        _transcript_path(video_path, vocabulary).write_text(json.dumps(segments), encoding="utf-8")
     except OSError:
         pass  # caching is an optimisation; a failed write must not fail the request
 
@@ -215,14 +230,23 @@ def _complete(api_key: str, model_name: str, prompt: str) -> str:
     return text
 
 
-def select_clips(segments: List[dict], max_clips: int, model: Optional[str]) -> List[dict]:
+def length_rule(min_seconds: float, max_seconds: float) -> str:
+    if min_seconds == MIN_CLIP_SECONDS and max_seconds == MAX_CLIP_SECONDS:
+        return "ideally 30 to 60 seconds. A complete moment may be as short as 15 seconds."
+    return f"every clip MUST be between {min_seconds:g} and {max_seconds:g} seconds long."
+
+
+def select_clips(segments: List[dict], max_clips: int, model: Optional[str],
+                 min_seconds: float = 15, max_seconds: float = 90) -> List[dict]:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise PipelineError("OPENROUTER_API_KEY environment variable is not configured.")
 
     transcript = "\n".join(f"[{s['start']:.1f}-{s['end']:.1f}] {s['text']}" for s in segments)
-    prompt = CLIP_SELECTION_PROMPT.replace("{max_clips}", str(max_clips)).replace(
-        "{transcript}", transcript
+    prompt = (
+        CLIP_SELECTION_PROMPT.replace("{max_clips}", str(max_clips))
+        .replace("{length_rule}", length_rule(min_seconds, max_seconds))
+        .replace("{transcript}", transcript)
     )
     model_name = model or DEFAULT_OPENROUTER_MODEL
     content = _complete(api_key, model_name, prompt)
@@ -234,18 +258,19 @@ def select_clips(segments: List[dict], max_clips: int, model: Optional[str]) -> 
         raise PipelineError(f"{model_name} returned malformed clips: {content[:200]}")
 
 
-def pick_clips(segments: List[dict], max_clips: int, model: Optional[str]) -> tuple:
+def pick_clips(segments: List[dict], max_clips: int, model: Optional[str],
+               min_seconds: float = 15, max_seconds: float = 90) -> tuple:
     """
     Returns (candidates, model that answered). With AUTO_FREE, tries the free models in
     FREE_MODEL_CHAIN order: free models have daily limits and get busy, so when one is
     rate-limited or returns nothing usable the next one answers instead.
     """
     if model != AUTO_FREE:
-        return select_clips(segments, max_clips, model), model or DEFAULT_OPENROUTER_MODEL
+        return select_clips(segments, max_clips, model, min_seconds, max_seconds), model or DEFAULT_OPENROUTER_MODEL
     failures = []
     for candidate in FREE_MODEL_CHAIN:
         try:
-            clips = select_clips(segments, max_clips, candidate)
+            clips = select_clips(segments, max_clips, candidate, min_seconds, max_seconds)
             if clips:
                 return clips, candidate
             failures.append(f"{candidate}: no clips")
@@ -289,12 +314,29 @@ def _caption_lines(words: List[dict], clip_start: float) -> List[dict]:
 
 
 MIN_CLIP_SECONDS = 15
+MAX_CLIP_SECONDS = 90
 
 
-def build_clips(candidates: List[dict], segments: List[dict], duration: float) -> List[dict]:
+def _broll_ideas(cand: dict, clip_start: float, clip_end: float) -> List[dict]:
+    """The model's B-roll suggestions, as offsets inside the final clip (outside ones dropped)."""
+    ideas = []
+    for idea in cand.get("broll") or []:
+        try:
+            at = float(idea["at_seconds"]) - clip_start
+            show = str(idea["show"]).strip()
+        except (KeyError, TypeError, ValueError):
+            continue
+        if show and 0 <= at <= clip_end - clip_start - 1:
+            ideas.append({"at": round(at, 1), "show": show[:160]})
+    return ideas[:3]
+
+
+def build_clips(candidates: List[dict], segments: List[dict], duration: float,
+                min_seconds: float = MIN_CLIP_SECONDS, max_seconds: float = MAX_CLIP_SECONDS) -> List[dict]:
     """
     Resolves overlaps (higher score keeps its range, lower-scored picks are trimmed to the
-    free space), snaps to real word boundaries, and attaches Whisper captions.
+    free space), snaps to real word boundaries, keeps clips within min/max seconds (a long one
+    ends at its last sentence that fits), and attaches Whisper captions.
     """
     all_words = [w for s in segments for w in s["words"]]
     picks = []
@@ -317,11 +359,19 @@ def build_clips(candidates: List[dict], segments: List[dict], duration: float) -
         words = [w for w in all_words if w["start"] >= start - 0.05 and w["end"] <= end + 0.5]
         if not words:
             continue
+        if words[-1]["end"] - words[0]["start"] > max_seconds:
+            limit = words[0]["start"] + max_seconds - 0.4
+            fitting = [w for w in words if w["end"] <= limit]
+            sentence_ends = [i for i, w in enumerate(fitting)
+                             if w["word"].strip()[-1:] in ".?!" and w["end"] - words[0]["start"] >= min_seconds]
+            words = fitting[: sentence_ends[-1] + 1] if sentence_ends else fitting
+            if not words:
+                continue
         clip_start = max(0.0, words[0]["start"] - 0.1)
         clip_end = words[-1]["end"] + 0.3
         if duration:
             clip_end = min(duration, clip_end)
-        if clip_end - clip_start < MIN_CLIP_SECONDS:
+        if clip_end - clip_start < min_seconds:
             continue
         kept_ranges.append((clip_start, clip_end))
         lines = _caption_lines(words, clip_start)
@@ -338,6 +388,7 @@ def build_clips(candidates: List[dict], segments: List[dict], duration: float) -
                 "hook_transcript": hook,
                 "reasoning": str(cand.get("reasoning") or ""),
                 "transcript_lines": lines,
+                "broll_ideas": _broll_ideas(cand, clip_start, clip_end),
             }
         )
 
