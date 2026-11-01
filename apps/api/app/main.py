@@ -456,7 +456,7 @@ def analyze_with_transcript(
         if not segments:
             raise HTTPException(status_code=422, detail="No speech was found in this video.")
         started = time.time()
-        candidates = transcript_pipeline.select_clips(segments, max_clips, llm_model)
+        candidates, llm_model = transcript_pipeline.pick_clips(segments, max_clips, llm_model)
         select_seconds = time.time() - started
         clips = transcript_pipeline.build_clips(candidates, segments, duration)
     except transcript_pipeline.PipelineError as exc:
