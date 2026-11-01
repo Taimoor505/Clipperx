@@ -198,6 +198,88 @@ async function readErrorDetail(response: Response): Promise<string> {
 
 const YOUTUBE_LINK = /^https:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//;
 
+// How rendered clips look: output shape, framing, and campaign banner/logo overlays.
+// Images are kept as data URLs so the settings survive a reload (localStorage).
+type ExportLayout = {
+  aspectRatio: '9:16' | '4:5' | '1:1' | '16:9';
+  framing: 'auto' | 'speaker' | 'fit';
+  bannerDataUrl: string | null;
+  bannerName: string;
+  bannerPosition: 'bottom' | 'top';
+  logoDataUrl: string | null;
+  logoName: string;
+  logoPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  logoSize: number; // share of canvas width
+  logoOpacity: number;
+};
+
+const DEFAULT_EXPORT_LAYOUT: ExportLayout = {
+  aspectRatio: '9:16',
+  framing: 'auto',
+  bannerDataUrl: null,
+  bannerName: '',
+  bannerPosition: 'bottom',
+  logoDataUrl: null,
+  logoName: '',
+  logoPosition: 'top-right',
+  logoSize: 0.16,
+  logoOpacity: 0.9,
+};
+
+const EXPORT_LAYOUT_KEY = 'clipperx.exportLayout';
+const CANVAS_LABELS: Record<ExportLayout['aspectRatio'], string> = {
+  '9:16': '1080x1920',
+  '4:5': '1080x1350',
+  '1:1': '1080x1080',
+  '16:9': '1920x1080',
+};
+
+function loadExportLayout(): ExportLayout {
+  try {
+    const saved = window.localStorage.getItem(EXPORT_LAYOUT_KEY);
+    return saved ? { ...DEFAULT_EXPORT_LAYOUT, ...JSON.parse(saved) } : DEFAULT_EXPORT_LAYOUT;
+  } catch {
+    return DEFAULT_EXPORT_LAYOUT;
+  }
+}
+
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  return (await fetch(dataUrl)).blob();
+}
+
+function readImageFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      reject(new Error('Use a PNG, JPG or WebP image.'));
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      reject(new Error('Images must be under 5 MB.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('Could not read that image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Adds the export layout fields (and banner/logo images) to a /api/render request. */
+async function appendExportLayout(form: FormData, layout: ExportLayout): Promise<void> {
+  form.append('aspect_ratio', layout.aspectRatio);
+  form.append('framing', layout.framing);
+  if (layout.bannerDataUrl) {
+    form.append('banner', await dataUrlToBlob(layout.bannerDataUrl), layout.bannerName || 'banner.png');
+    form.append('banner_position', layout.bannerPosition);
+  }
+  if (layout.logoDataUrl) {
+    form.append('logo', await dataUrlToBlob(layout.logoDataUrl), layout.logoName || 'logo.png');
+    form.append('logo_position', layout.logoPosition);
+    form.append('logo_size', String(layout.logoSize));
+    form.append('logo_opacity', String(layout.logoOpacity));
+  }
+}
+
 function formatBytes(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(2)} GB`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`;
@@ -267,6 +349,7 @@ interface MinimalVerticalClipCardProps {
   clip: ViralClipSegment;
   videoFileUrl: string | null;
   sourceVideoId: string | null;
+  exportLayout: ExportLayout;
   captionPreset: CaptionPresetName;
   burnInCaptions: boolean;
   dynamicZoom: boolean;
@@ -280,6 +363,7 @@ interface MinimalVerticalClipCardProps {
 function MinimalVerticalClipCard({
   clip,
   videoFileUrl,
+  exportLayout,
   sourceVideoId,
   captionPreset,
   burnInCaptions,
@@ -564,14 +648,15 @@ function MinimalVerticalClipCard({
       form.append('dynamic_zoom', String(dynamicZoom));
       form.append('caption_preset', captionPreset);
       form.append('transcript_json', JSON.stringify(clip.transcript_lines ?? []));
-      fetch(`${BACKEND_URL}/api/render`, { method: 'POST', body: form })
+      appendExportLayout(form, exportLayout)
+        .then(() => fetch(`${BACKEND_URL}/api/render`, { method: 'POST', body: form }))
         .then(async (response) => {
           if (!response.ok) throw new Error(await readErrorDetail(response));
           const blob = await response.blob();
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `clipperx_short_${clip.clip_id}_1080x1920.mp4`;
+          a.download = `clipperx_short_${clip.clip_id}_${CANVAS_LABELS[exportLayout.aspectRatio]}.mp4`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
@@ -863,7 +948,41 @@ export default function ClipperStudio() {
   >('gemini-flash-latest');
   const [burnInCaptions, setBurnInCaptions] = useState<boolean>(true);
   const [dynamicZoom, setDynamicZoom] = useState<boolean>(true);
-  const [autoFaceCentering, setAutoFaceCentering] = useState<boolean>(true);
+  const [exportLayout, setExportLayout] = useState<ExportLayout>(DEFAULT_EXPORT_LAYOUT);
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const layoutLoaded = useRef(false);
+
+  useEffect(() => {
+    setExportLayout(loadExportLayout());
+    layoutLoaded.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!layoutLoaded.current) return;
+    try {
+      window.localStorage.setItem(EXPORT_LAYOUT_KEY, JSON.stringify(exportLayout));
+    } catch {
+      setLayoutError('Too big to remember after a reload; it still applies until you close the page.');
+    }
+  }, [exportLayout]);
+
+  const updateLayout = (changes: Partial<ExportLayout>) =>
+    setExportLayout((prev) => ({ ...prev, ...changes }));
+
+  const pickLayoutImage = async (kind: 'banner' | 'logo', file: File | undefined) => {
+    if (!file) return;
+    setLayoutError(null);
+    try {
+      const dataUrl = await readImageFile(file);
+      updateLayout(
+        kind === 'banner'
+          ? { bannerDataUrl: dataUrl, bannerName: file.name }
+          : { logoDataUrl: dataUrl, logoName: file.name }
+      );
+    } catch (err: unknown) {
+      setLayoutError(err instanceof Error ? err.message : String(err));
+    }
+  };
   const [enableAudioDucking, setEnableAudioDucking] = useState<boolean>(true);
   const [captionPreset, setCaptionPreset] =
     useState<CaptionPresetName>('Hormozi Pop');
@@ -1383,6 +1502,7 @@ export default function ClipperStudio() {
                       clip={clip}
                       videoFileUrl={videoFileUrl}
                       sourceVideoId={sourceVideoId}
+                      exportLayout={exportLayout}
                       captionPreset={captionPreset}
                       burnInCaptions={burnInCaptions}
                       dynamicZoom={dynamicZoom}
@@ -1661,6 +1781,154 @@ export default function ClipperStudio() {
                   </select>
                 </div>
 
+                <div className="space-y-3 rounded-xl border border-white/10 p-3.5">
+                  <p className="text-xs font-semibold text-white">Export Layout</p>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1.5">
+                      <label htmlFor="layout-ratio" className="text-xs font-medium text-slate-300 block">
+                        Aspect Ratio
+                      </label>
+                      <select
+                        id="layout-ratio"
+                        value={exportLayout.aspectRatio}
+                        onChange={(e) => updateLayout({ aspectRatio: e.target.value as ExportLayout['aspectRatio'] })}
+                        className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                      >
+                        <option value="9:16">9:16 Shorts / Reels</option>
+                        <option value="4:5">4:5 Feed</option>
+                        <option value="1:1">1:1 Square</option>
+                        <option value="16:9">16:9 Landscape</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="layout-framing" className="text-xs font-medium text-slate-300 block">
+                        Framing
+                      </label>
+                      <select
+                        id="layout-framing"
+                        value={exportLayout.framing}
+                        onChange={(e) => updateLayout({ framing: e.target.value as ExportLayout['framing'] })}
+                        className="w-full h-9 px-3 rounded-xl bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                      >
+                        <option value="auto">Auto</option>
+                        <option value="speaker">Speaker crop</option>
+                        <option value="fit">Fit with blur</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    {exportLayout.framing === 'auto'
+                      ? 'People talking: crops onto the speaker. Anything else: fits the whole frame over a blur.'
+                      : exportLayout.framing === 'speaker'
+                        ? 'Always crops onto the person speaking.'
+                        : 'Always shows the whole frame over a blurred copy.'}
+                  </p>
+
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-medium text-slate-300 block">Banner</span>
+                    {exportLayout.bannerDataUrl ? (
+                      <div className="flex items-center gap-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={exportLayout.bannerDataUrl} alt="" className="h-8 max-w-[96px] rounded object-contain bg-black/40" />
+                        <select
+                          aria-label="Banner position"
+                          value={exportLayout.bannerPosition}
+                          onChange={(e) => updateLayout({ bannerPosition: e.target.value as ExportLayout['bannerPosition'] })}
+                          className="flex-1 h-8 px-2 rounded-lg bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                        >
+                          <option value="bottom">Footer</option>
+                          <option value="top">Header</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => updateLayout({ bannerDataUrl: null, bannerName: '' })}
+                          className="h-8 px-2.5 rounded-lg border border-white/10 text-xs text-slate-300 hover:text-white cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex h-9 items-center justify-center rounded-xl border border-dashed border-white/15 text-xs text-slate-400 hover:text-white hover:border-[#7C3AED] cursor-pointer">
+                        Upload campaign banner (PNG/JPG)
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="sr-only"
+                          onChange={(e) => {
+                            pickLayoutImage('banner', e.target.files?.[0]);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-medium text-slate-300 block">Logo / Watermark</span>
+                    {exportLayout.logoDataUrl ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={exportLayout.logoDataUrl} alt="" className="h-8 w-8 rounded object-contain bg-black/40" />
+                          <select
+                            aria-label="Logo position"
+                            value={exportLayout.logoPosition}
+                            onChange={(e) => updateLayout({ logoPosition: e.target.value as ExportLayout['logoPosition'] })}
+                            className="flex-1 h-8 px-2 rounded-lg bg-[#0B0F17] border border-white/10 text-xs text-white focus:outline-none focus:border-[#7C3AED]"
+                          >
+                            <option value="top-left">Top left</option>
+                            <option value="top-right">Top right</option>
+                            <option value="bottom-left">Bottom left</option>
+                            <option value="bottom-right">Bottom right</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => updateLayout({ logoDataUrl: null, logoName: '' })}
+                            className="h-8 px-2.5 rounded-lg border border-white/10 text-xs text-slate-300 hover:text-white cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                          <span className="w-14">Size</span>
+                          <input
+                            type="range" min={0.05} max={0.4} step={0.01}
+                            value={exportLayout.logoSize}
+                            onChange={(e) => updateLayout({ logoSize: Number(e.target.value) })}
+                            className="flex-1 accent-[#7C3AED]"
+                          />
+                          <span className="w-9 text-right tabular-nums">{Math.round(exportLayout.logoSize * 100)}%</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                          <span className="w-14">Opacity</span>
+                          <input
+                            type="range" min={0.2} max={1} step={0.05}
+                            value={exportLayout.logoOpacity}
+                            onChange={(e) => updateLayout({ logoOpacity: Number(e.target.value) })}
+                            className="flex-1 accent-[#7C3AED]"
+                          />
+                          <span className="w-9 text-right tabular-nums">{Math.round(exportLayout.logoOpacity * 100)}%</span>
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="flex h-9 items-center justify-center rounded-xl border border-dashed border-white/15 text-xs text-slate-400 hover:text-white hover:border-[#7C3AED] cursor-pointer">
+                        Upload logo (PNG with transparency works best)
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="sr-only"
+                          onChange={(e) => {
+                            pickLayoutImage('logo', e.target.files?.[0]);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                  {layoutError && <p role="alert" className="text-[11px] text-red-400">{layoutError}</p>}
+                </div>
+
                 <div className="space-y-2.5 pt-1">
                   <div className="flex items-center justify-between rounded-xl bg-[#0B0F17] px-3.5 py-2.5 border border-white/5">
                     <span className="text-xs font-medium text-slate-200">
@@ -1682,15 +1950,6 @@ export default function ClipperStudio() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-xl bg-[#0B0F17] px-3.5 py-2.5 border border-white/5">
-                    <span className="text-xs font-medium text-slate-200">
-                      Auto Face Centering
-                    </span>
-                    <Switch
-                      checked={autoFaceCentering}
-                      onCheckedChange={setAutoFaceCentering}
-                    />
-                  </div>
 
                   <div className="flex items-center justify-between rounded-xl bg-[#0B0F17] px-3.5 py-2.5 border border-white/5">
                     <span className="text-xs font-medium text-slate-200">
