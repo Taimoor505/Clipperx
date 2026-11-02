@@ -76,12 +76,21 @@ def _get_whisper():
     return _whisper
 
 
-def transcribe(video_path: Path, workdir: Path, vocabulary: Optional[List[str]] = None) -> List[dict]:
-    """Returns segments [{start, end, text, words: [{word, start, end}]}] in absolute seconds."""
+def transcribe(video_path: Path, workdir: Path, vocabulary: Optional[List[str]] = None,
+               start: float = 0.0, end: Optional[float] = None, batched: bool = True) -> List[dict]:
+    """
+    Returns segments [{start, end, text, words: [{word, start, end}]}] in absolute seconds.
+    `start`/`end` transcribe only that part of the video (times stay absolute).
+    `batched=False` for short pieces: batched decoding with the names prompt drops whole
+    sentences from audio under a minute or so; one pass at a time keeps them.
+    """
     audio_path = workdir / "audio.wav"
+    window = ["-ss", f"{start:.3f}"] if start else []
+    if end is not None:
+        window += ["-to", f"{end:.3f}"]
     proc = subprocess.run(
         [
-            "ffmpeg", "-y", "-i", str(video_path),
+            "ffmpeg", "-y", *window, "-i", str(video_path),
             "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le",
             str(audio_path),
         ],
@@ -99,8 +108,10 @@ def transcribe(video_path: Path, workdir: Path, vocabulary: Optional[List[str]] 
 
     # Names and terms the user listed (guests, brands) steer Whisper's spelling
     terms = ", ".join(vocabulary or [])
-    segments, _info = _get_whisper().transcribe(
-        samples, word_timestamps=True, vad_filter=True, batch_size=WHISPER_BATCH,
+    pipeline = _get_whisper()
+    segments, _info = (pipeline if batched else pipeline.model).transcribe(
+        samples, word_timestamps=True, vad_filter=True,
+        **({"batch_size": WHISPER_BATCH} if batched else {}),
         initial_prompt=f"Names and terms: {terms}." if terms else None,
         hotwords=terms or None,
     )
@@ -113,14 +124,102 @@ def transcribe(video_path: Path, workdir: Path, vocabulary: Optional[List[str]] 
             # Tokens without a leading space continue the previous word ("$10" + ",000")
             if words and not w.word.startswith(" "):
                 words[-1]["word"] += w.word.strip()
-                words[-1]["end"] = float(w.end)
+                words[-1]["end"] = float(w.end) + start
             else:
-                words.append({"word": w.word.strip(), "start": float(w.start), "end": float(w.end)})
+                words.append({"word": w.word.strip(), "start": float(w.start) + start, "end": float(w.end) + start})
         if words:
-            result.append(
-                {"start": float(seg.start), "end": float(seg.end), "text": seg.text.strip(), "words": words}
-            )
+            result.append({
+                "start": float(seg.start) + start, "end": float(seg.end) + start,
+                "text": seg.text.strip(), "words": words,
+            })
     return result
+
+
+# --- Clips from the user's own timestamps -------------------------------------------------
+
+TIME_TOKEN = re.compile(r"(?<![\d:.])(\d{1,2}(?::\d{2}){1,2}(?:\.\d+)?)(?![\d:])")
+QUOTED = re.compile(r"[\u201c\"]([^\u201d\"]{4,240})[\u201d\"]")
+
+
+def _clock_seconds(token: str) -> float:
+    total = 0.0
+    for part in token.split(":"):
+        total = total * 60 + float(part)
+    return total
+
+
+def parse_timestamps(text: str) -> List[dict]:
+    """
+    One clip per line: "Nate Soares on Tucker · 54:38 to 56:22 · "The AIs then started...""
+    Times pair up as ranges, so "0:00 to 0:10, then 0:25 to 0:53" is one clip of two parts.
+    A quoted line becomes the clip's hook; text before the first time names the clip.
+    """
+    moments = []
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        tokens = list(TIME_TOKEN.finditer(line))
+        if len(tokens) < 2:
+            continue
+        times = [_clock_seconds(m.group(1)) for m in tokens]
+        ranges = sorted((a, b) for a, b in zip(times[0::2], times[1::2]) if b - a >= 0.5)
+        if not ranges:
+            continue
+        seps = " ·|-\u2013\u2014:,~()[]\u2192"
+        label = re.sub(r"^[\s\d.)#*•-]+", "", line[: tokens[0].start()]).strip(seps)
+        if not label:  # "08:30 – 10:45 | Expiration Dates": the name comes after the times
+            label = QUOTED.sub("", line[tokens[-1].end():]).strip(seps)
+        quotes = QUOTED.findall(line)
+        moments.append({"ranges": ranges, "label": label, "hook": quotes[0].strip() if quotes else ""})
+    return moments
+
+
+def transcribe_ranges(video_path: Path, workdir: Path, ranges: List[tuple],
+                      vocabulary: Optional[List[str]] = None, pad: float = 1.0) -> List[dict]:
+    """Transcribes only these parts of the video (merged, with a little padding)."""
+    merged: List[List[float]] = []
+    for s, e in sorted(ranges):
+        s, e = max(0.0, s - pad), e + pad
+        if merged and s <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], e)
+        else:
+            merged.append([s, e])
+    segments = []
+    for s, e in merged:
+        segments += transcribe(video_path, workdir, vocabulary, start=s, end=e, batched=False)
+    return segments
+
+
+def build_timestamp_clips(moments: List[dict], segments: List[dict], duration: float) -> List[dict]:
+    """Clips exactly where the user said, with Whisper captions; multi-part clips keep `segments`."""
+    all_words = [w for s in segments for w in s["words"]]
+    clips = []
+    for moment in moments:
+        ranges = [(s, min(e, duration) if duration else e) for s, e in moment["ranges"]
+                  if not duration or s < duration]
+        if not ranges:
+            continue
+        clip_start, clip_end = ranges[0][0], ranges[-1][1]
+        words = [w for w in all_words
+                 if any(s - 0.15 <= w["start"] and w["end"] <= e + 0.15 for s, e in ranges)]
+        lines = _caption_lines(words, clip_start) if words else []
+        hook = moment["hook"] or (lines[0]["text"] if lines else "")
+        clips.append({
+            "clip_id": len(clips) + 1,
+            "title": (moment["hook"] or moment["label"] or f"Clip {len(clips) + 1}")[:120],
+            "start_time": _timestamp(clip_start),
+            "end_time": _timestamp(clip_end),
+            "duration_seconds": round(sum(e - s for s, e in ranges), 2),
+            "virality_score": 0,
+            "hook_transcript": hook,
+            "reasoning": moment["label"] or "From your timestamps",
+            "transcript_lines": lines,
+            "broll_ideas": [],
+            "from_timestamps": True,
+            # Parts of the clip to keep, from its start; only when it jumps over something
+            "segments": [[round(s - clip_start, 3), round(e - clip_start, 3)] for s, e in ranges]
+            if len(ranges) > 1 else None,
+        })
+    return clips
 
 
 def _transcript_dir() -> Path:

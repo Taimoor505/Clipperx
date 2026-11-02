@@ -398,6 +398,7 @@ async function renderAndSaveClip(
   form.append('transcript_json', JSON.stringify(clip.transcript_lines ?? []));
   await appendExportLayout(form, options.exportLayout);
   appendCampaignOptions(form, options.exportLayout, clip.title);
+  if (clip.segments?.length) form.append('segments_json', JSON.stringify(clip.segments));
   if (options.exportLayout.hookLine) form.append('hook_text', clip.title);
   for (const insert of options.broll) form.append('broll', insert.file, insert.file.name);
   form.append(
@@ -842,7 +843,7 @@ function MinimalVerticalClipCard({
             title="Why this clip was picked"
             className="pointer-events-auto rounded-md bg-black/60 px-2 py-1 text-[11px] font-semibold text-white tabular-nums cursor-pointer hover:bg-black/75"
           >
-            Score {clip.virality_score}
+            {clip.from_timestamps ? 'Your pick' : `Score ${clip.virality_score}`}
           </button>
           <span className="rounded-md bg-black/60 px-2 py-1 text-[11px] font-semibold text-white tabular-nums">
             {formatClock(clip.duration_seconds)}
@@ -1299,6 +1300,9 @@ export default function ClipperStudio() {
   const [pickedBy, setPickedBy] = useState<string>('');
   const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [maxClips, setMaxClips] = useState<number>(10);
+  // Exact moments to clip (e.g. from a campaign brief); when set, the AI doesn't pick
+  const [timestampsText, setTimestampsText] = useState<string>('');
+  const [showTimestamps, setShowTimestamps] = useState<boolean>(false);
   const [analysisEngine, setAnalysisEngine] = useState<'transcript' | 'gemini'>(
     'transcript'
   );
@@ -1408,7 +1412,8 @@ export default function ClipperStudio() {
     // One input box takes either: a dropped/chosen file wins, otherwise the pasted link
     const linkUrl = fileOverride ? '' : youtubeUrl.trim();
     if (BACKEND_URL && (linkUrl || targetFile)) {
-      const useTranscript = analysisEngine === 'transcript';
+      const fromTimestamps = Boolean(timestampsText.trim());
+      const useTranscript = analysisEngine === 'transcript' || fromTimestamps;
       setSourceVideoId(null);
 
       // Links are downloaded on the backend first (0-30% of the bar), then analyzed by id
@@ -1453,9 +1458,11 @@ export default function ClipperStudio() {
           if (next >= 25) {
             setProgressStageLabel(
               useTranscript
-                ? next < 80
-                  ? 'Transcribing audio with Whisper...'
-                  : 'Picking the best moments...'
+                ? fromTimestamps
+                  ? 'Transcribing your moments...'
+                  : next < 80
+                    ? 'Transcribing audio with Whisper...'
+                    : 'Picking the best moments...'
                 : 'Gemini is watching your video...'
             );
           }
@@ -1472,7 +1479,10 @@ export default function ClipperStudio() {
           form.append('video', targetFile);
         }
         form.append('max_clips', String(maxClips));
-        if (useTranscript) {
+        if (fromTimestamps) {
+          form.append('timestamps', timestampsText);
+          form.append('vocabulary', exportLayout.terms);
+        } else if (useTranscript) {
           form.append('llm_model', llmModel);
           form.append('vocabulary', exportLayout.terms);
           form.append('min_seconds', String(exportLayout.minSeconds));
@@ -1482,7 +1492,9 @@ export default function ClipperStudio() {
         }
         const endpoint = geminiReadsLink
           ? 'analyze-url'
-          : useTranscript
+          : fromTimestamps
+            ? 'clips-from-timestamps'
+            : useTranscript
             ? 'analyze-transcript'
             : 'analyze-video';
         const response = await fetch(`${BACKEND_URL}/api/${endpoint}`, {
@@ -1796,6 +1808,48 @@ export default function ClipperStudio() {
                   className="hidden"
                 />
               </div>
+            </div>
+
+            <div className="mt-3 w-full">
+              {showTimestamps || timestampsText ? (
+                <div className="rounded-2xl border border-line bg-surface p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="timestamps" className="text-sm font-medium">
+                      Clip these exact moments
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTimestampsText('');
+                        setShowTimestamps(false);
+                      }}
+                      className="text-xs text-ink-muted hover:text-ink cursor-pointer"
+                    >
+                      Let the AI pick instead
+                    </button>
+                  </div>
+                  <textarea
+                    id="timestamps"
+                    rows={4}
+                    value={timestampsText}
+                    onChange={(e) => setTimestampsText(e.target.value)}
+                    placeholder={'One clip per line, e.g.\nNate Soares on Tucker · 54:38 to 56:22 · \u201cThe AIs then started...\u201d\nCoxon on CNN · 0:00 to 0:10, then 0:25 to 0:53'}
+                    className="w-full px-3 py-2 rounded-xl bg-canvas border border-line text-sm font-mono text-ink placeholder:text-ink-subtle focus:outline-none focus:border-accent resize-y"
+                  />
+                  <p className="text-xs text-ink-subtle">
+                    Paste these first, then add the video above. Several ranges on one line make
+                    one clip that jumps between them; a quoted line becomes the hook.
+                  </p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowTimestamps(true)}
+                  className="mx-auto block text-sm text-ink-muted hover:text-ink underline underline-offset-2 cursor-pointer"
+                >
+                  Have exact timestamps? Clip those instead
+                </button>
+              )}
             </div>
 
             <button

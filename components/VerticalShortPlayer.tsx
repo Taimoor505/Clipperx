@@ -57,6 +57,10 @@ export interface ViralClipSegment {
   /** The AI's original range, kept once the clip is trimmed: captions are timed against it */
   origin_start?: string;
   origin_end?: string;
+  /** Made from the user's timestamps, not picked by the AI (so it has no score) */
+  from_timestamps?: boolean;
+  /** Parts to keep, in seconds from start_time, when the clip jumps over something */
+  segments?: [number, number][] | null;
 }
 
 export interface VerticalShortPlayerProps {

@@ -662,6 +662,54 @@ def analyze_with_transcript(
     }
 
 
+@app.post("/api/clips-from-timestamps")
+def clips_from_timestamps(
+    video: Optional[UploadFile] = File(None),
+    video_id: Optional[str] = Form(None),
+    timestamps: str = Form(...),  # one clip per line, e.g. "54:38 to 56:22 "hook line""
+    vocabulary: str = Form(""),
+):
+    """
+    Clips at the moments the user (or the campaign brief) gives, no AI picking. Only those
+    parts are transcribed, unless the whole video's transcript is already saved.
+    """
+    moments = transcript_pipeline.parse_timestamps(timestamps)
+    if not moments:
+        raise HTTPException(status_code=400, detail="No timestamps found. Put each clip on its own line, like 54:38 to 56:22.")
+    if len(moments) > MAX_CLIPS_LIMIT:
+        raise HTTPException(status_code=400, detail=f"At most {MAX_CLIPS_LIMIT} clips at once.")
+    video_id, stored_path, _ = resolve_source(video, video_id)
+    duration = probe_duration_seconds(stored_path)
+    late = [m for m in moments if duration and m["ranges"][0][0] >= duration]
+    if late:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{len(late)} timestamp(s) start after the video ends ({seconds_to_timestamp(duration)[:8]}). "
+                   "Check that you added the right video.",
+        )
+    terms = transcript_pipeline.parse_vocabulary(vocabulary)
+    workdir = Path(tempfile.mkdtemp(prefix="clipperx_transcribe_"))
+    try:
+        started = time.time()
+        segments = transcript_pipeline.cached_transcript(stored_path, terms)
+        transcript_reused = segments is not None
+        if segments is None:
+            ranges = [r for m in moments for r in m["ranges"]]
+            segments = transcript_pipeline.transcribe_ranges(stored_path, workdir, ranges, terms)
+        clips = transcript_pipeline.build_timestamp_clips(moments, segments, duration)
+    except transcript_pipeline.PipelineError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+    return {
+        "clips": clips,
+        "model": "your timestamps",
+        "video_id": video_id,
+        "duration_seconds": duration,
+        "timings": {"transcribe_seconds": round(time.time() - started, 1), "transcript_reused": transcript_reused},
+    }
+
+
 @app.post("/api/downloads/{job_id}/import")
 def import_download(job_id: str):
     """Turns a finished link download into a stored video usable by analyze/render endpoints."""
@@ -1052,6 +1100,7 @@ def render_vertical_short(
     music_duck: bool = Form(True),  # music dips while people talk
     intro_asset: str = Form(""),
     outro_asset: str = Form(""),
+    segments_json: str = Form(""),  # [[start, end], ...] from the clip start: keep only these parts
 ):
     """
     Renders one clip in a single FFmpeg pass (plus one to join an intro/outro):
@@ -1134,6 +1183,15 @@ def render_vertical_short(
                  for w in words]
     punches = edits.punch_moments(words, lambda word: _is_keyword(word, terms)) if punch_zoom else []
     keep = edits.speech_intervals(words, length, max(0.3, silence_gap)) if cut_silences else [(0.0, length)]
+    if segments_json.strip():
+        try:
+            parts = [(float(s), float(e)) for s, e in json.loads(segments_json)]
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="segments_json must be [[start, end], ...].")
+        # Same timeline as the words: shifted by any trim of the clip's start
+        shift = start_s - new_start
+        parts = [(max(0.0, s + shift), min(length, e + shift)) for s, e in parts]
+        keep = edits.intersect(keep, [p for p in parts if p[1] - p[0] > 0.05]) or [(0.0, length)]
     tmap = edits.TimeMap(keep, speed)
     duration = tmap.duration
     caption_lines = edits.group_lines(edits.remap_words(words, tmap), style.words_per_line or 6)
