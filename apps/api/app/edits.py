@@ -117,6 +117,17 @@ def remap_words(words: List[dict], tmap: TimeMap) -> List[dict]:
     return out
 
 
+def intersect(a: List[Interval], b: List[Interval]) -> List[Interval]:
+    """The time covered by both lists of intervals."""
+    out = []
+    for s1, e1 in a:
+        for s2, e2 in b:
+            s, e = max(s1, s2), min(e1, e2)
+            if e - s > 0.05:
+                out.append((round(s, 3), round(e, 3)))
+    return sorted(out)
+
+
 def select_expr(keep: List[Interval]) -> str:
     """An FFmpeg select/aselect expression that keeps only these intervals."""
     return "+".join(f"between(t,{s:.3f},{e:.3f})" for s, e in keep)
